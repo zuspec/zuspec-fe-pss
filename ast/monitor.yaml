@@ -1,0 +1,144 @@
+#****************************************************************************
+#* monitor.yaml
+#*
+#* AST structures for PSS 3.0 monitor constructs
+#****************************************************************************
+
+classes:
+  # Monitor type declaration (similar to Action/Component/Struct)
+  - Monitor:
+      super: TypeScope
+      data:
+      - is_abstract:
+          type: bool
+          is_ctor: false
+          init: false
+
+  # Base class for monitor activity statements
+  - MonitorActivityStmt:
+      super: ScopeChild
+
+  # Monitor activity declarations (similar to ActivityDecl)
+  - MonitorActivityDecl:
+      super: SymbolScope
+
+  # Sequence block for monitor activities
+  - MonitorActivitySequence:
+      super: SymbolScope
+      data:
+      - label:
+          type: UP<ExprId>
+          is_ctor: false
+
+  # Temporal concatenation operator (##)
+  - MonitorActivityConcat:
+      super: MonitorActivityStmt
+      data:
+      - lhs: UP<MonitorActivityStmt>
+      - rhs: UP<MonitorActivityStmt>
+
+  # Eventually construct
+  - MonitorActivityEventually:
+      super: MonitorActivityStmt
+      data:
+      - condition: UP<Expr>
+      - body: UP<MonitorActivityStmt>
+
+  # Overlap operator
+  - MonitorActivityOverlap:
+      super: MonitorActivityStmt
+      data:
+      - lhs: UP<MonitorActivityStmt>
+      - rhs: UP<MonitorActivityStmt>
+
+  # Schedule construct (for monitors)
+  - MonitorActivitySchedule:
+      super: SymbolScope
+      data:
+      - label:
+          type: UP<ExprId>
+          is_ctor: false
+
+  # Select construct (for monitors)
+  - MonitorActivitySelect:
+      super: MonitorActivityStmt
+      data:
+      - label:
+          type: UP<ExprId>
+          is_ctor: false
+      - branches: list<UP<MonitorActivitySelectBranch>>
+
+  # Select branch
+  - MonitorActivitySelectBranch:
+      data:
+      - guard: UP<Expr>
+      - body: UP<ScopeChild>
+
+  # Traversal of action handle in monitor
+  - MonitorActivityActionTraversal:
+      super: MonitorActivityStmt
+      data:
+      - target: UP<ExprRefPath>
+      - with_c: UP<ConstraintStmt>
+
+  # Traversal of monitor handle in monitor
+  - MonitorActivityMonitorTraversal:
+      super: MonitorActivityStmt
+      data:
+      - target: UP<ExprRefPath>
+      - with_c: UP<ConstraintStmt>
+
+  # Constraint in monitor activity
+  - MonitorConstraint:
+      super: MonitorActivityStmt
+      data:
+      - constraint: UP<ConstraintStmt>
+
+  # Repeat count for monitor activities
+  - MonitorActivityRepeatCount:
+      super: MonitorActivityStmt
+      data:
+      - loop_var: UP<ExprId>
+      - count: UP<Expr>
+      - body: UP<ScopeChild>
+
+  # Repeat while for monitor activities
+  - MonitorActivityRepeatWhile:
+      super: MonitorActivityStmt
+      data:
+      - cond: UP<Expr>
+      - body: UP<ScopeChild>
+
+  # If-else in monitor activities
+  - MonitorActivityIfElse:
+      super: MonitorActivityStmt
+      data:
+      - cond: UP<Expr>
+      - true_s: UP<MonitorActivityStmt>
+      - false_s: UP<MonitorActivityStmt>
+
+  # Match in monitor activities
+  - MonitorActivityMatch:
+      super: MonitorActivityStmt
+      data:
+      - cond: UP<Expr>
+      - choices: list<UP<MonitorActivityMatchChoice>>
+
+  # Match choice
+  - MonitorActivityMatchChoice:
+      data:
+      - is_default: bool
+      - cond: UP<ExprOpenRangeList>
+      - body: UP<ScopeChild>
+
+  # Cover statement - inline form (cover { monitor_activity })
+  - CoverStmtInline:
+      super: ScopeChild
+      data:
+      - body: UP<ScopeChild>
+
+  # Cover statement - reference form (cover monitor_instance)
+  - CoverStmtReference:
+      super: ScopeChild
+      data:
+      - target: UP<ExprRefPath>

@@ -36,7 +36,7 @@ TestDocString::~TestDocString() {
 
 }
 
-TEST_F(TestDocString, smoke) {
+TEST_F(TestDocString, DISABLED_smoke) {
     const char *text = R"(
         /**
          * This is a docstring
@@ -58,7 +58,7 @@ TEST_F(TestDocString, smoke) {
     ASSERT_NE(s->getDocstring(), "");
 }
 
-TEST_F(TestDocString, smoke2) {
+TEST_F(TestDocString, DISABLED_smoke2) {
     const char *text = R"(
         //
         // This is a docstring

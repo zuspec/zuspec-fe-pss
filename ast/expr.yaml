@@ -27,6 +27,16 @@ enums:
         - UnaryOp_BitAnd
         - UnaryOp_BitOr
         - UnaryOp_BitXor
+    - StringMethodId:
+        - StringMethod_None
+        - StringMethod_Size
+        - StringMethod_Find
+        - StringMethod_FindLast
+        - StringMethod_FindAll
+        - StringMethod_Lower
+        - StringMethod_Upper
+        - StringMethod_Split
+        - StringMethod_Chars
 
 classes: 
     - Expr: {}
@@ -159,6 +169,10 @@ classes:
                 type: int32_t
                 init: -1
                 is_ctor: false
+            - string_method_id:
+                type: StringMethodId
+                init: StringMethodId::StringMethod_None
+                is_ctor: false
 #                visit: false
 #            - target:
 #                is_ctor: false
@@ -260,6 +274,12 @@ classes:
         - data:
             - value: string
             - is_raw: bool
+    - ExprSubstring:
+        - super: Expr
+        - data:
+            - expr: "UP<Expr>"
+            - start: "UP<Expr>"
+            - end: "UP<Expr>"
     - ExprSubscript:
         - super: Expr
         - data: 

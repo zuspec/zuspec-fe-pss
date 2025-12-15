@@ -144,6 +144,11 @@ classes:
 - ActivitySuper:
     super: ActivityLabeledStmt
 
+- ActivityAtomicBlock:
+    super: ActivityLabeledStmt
+    data:
+    - body: UP<ScopeChild>
+
 
 
 

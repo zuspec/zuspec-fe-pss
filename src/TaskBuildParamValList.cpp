@@ -227,6 +227,14 @@ void TaskBuildParamValList::visitDataTypeEnum(ast::IDataTypeEnum *i) {
     DEBUG_LEAVE("visitDataTypeEnum");
 }
 
+void TaskBuildParamValList::visitDataTypeRef(ast::IDataTypeRef *i) {
+    DEBUG_ENTER("visitDataTypeRef");
+    // For ref types in template parameters, we don't recurse into the referenced type
+    // The ref type itself is the parameter value, not what it references
+    // This prevents infinite recursion when processing types like array<ref A, 10>
+    DEBUG_LEAVE("visitDataTypeRef");
+}
+
 void TaskBuildParamValList::visitDataTypeUserDefined(ast::IDataTypeUserDefined *i) {
     DEBUG_ENTER("visitDataTypeUserDefined %s", 
         i->getType_id()->getElems().back()->getId()->getId().c_str());

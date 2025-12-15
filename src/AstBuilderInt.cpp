@@ -1062,6 +1062,30 @@ antlrcpp::Any AstBuilderInt::visitProcedural_yield_stmt(PSSParser::Procedural_yi
     return 0;
 }
 
+antlrcpp::Any AstBuilderInt::visitProcedural_randomization_stmt(PSSParser::Procedural_randomization_stmtContext *ctx) {
+    DEBUG_ENTER("visitProcedural_randomization_stmt");
+
+    // Get the target expression(s)
+    ast::IExpr *target = 0;
+    if (ctx->procedural_randomization_target()) {
+        // TODO: Process randomization target properly
+        // For now, create a simple null target
+    }
+
+    // TODO: Handle constraints from procedural_randomization_term
+    // if (ctx->procedural_randomization_term() && ctx->procedural_randomization_term()->constraint_set())
+
+    // Create the randomize statement
+    ast::IProceduralStmtRandomize *rand_stmt = m_factory->mkProceduralStmtRandomize(target);
+    setLoc(rand_stmt, ctx->start);
+
+    m_exec_stmt = rand_stmt;
+    m_exec_stmt_cnt++;
+
+    DEBUG_LEAVE("visitProcedural_randomization_stmt");
+    return 0;
+}
+
 // B.8 Component declarations
 
 antlrcpp::Any AstBuilderInt::visitComponent_declaration(PSSParser::Component_declarationContext *ctx) {
@@ -1117,6 +1141,240 @@ antlrcpp::Any AstBuilderInt::visitComponent_declaration(PSSParser::Component_dec
 	pop_scope();
 
 	DEBUG_LEAVE("visitComponent_declaration");
+	return 0;
+}
+
+// Monitor declarations (PSS 3.0)
+
+antlrcpp::Any AstBuilderInt::visitMonitor_declaration(PSSParser::Monitor_declarationContext *ctx) {
+	DEBUG_ENTER("visitMonitor_declaration");
+	ast::ITypeIdentifier *super_t = 0;
+
+	if (ctx->monitor_super_spec()) {
+		super_t = mkTypeId(ctx->monitor_super_spec()->type_identifier());
+	}
+
+	ast::IMonitor *monitor = m_factory->mkMonitor(
+		mkId(ctx->monitor_identifier()->identifier()),
+		super_t);
+	monitor->setIs_abstract(false);
+    setLoc(monitor, ctx->start);
+
+	if (ctx->template_param_decl_list()) {
+        monitor->setParams(mkTypeParamDecl(ctx->template_param_decl_list()));
+	}
+
+	addChild(monitor, ctx->start, ctx->TOK_RCBRACE()->getSymbol());
+	push_scope(monitor);
+
+	std::vector<PSSParser::Monitor_body_itemContext *> items = ctx->monitor_body_item();
+
+	for (std::vector<PSSParser::Monitor_body_itemContext *>::const_iterator
+		it=items.begin();
+		it!=items.end(); it++) {
+		(*it)->accept(this);
+	}
+
+	pop_scope();
+
+	DEBUG_LEAVE("visitMonitor_declaration");
+	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitAbstract_monitor_declaration(PSSParser::Abstract_monitor_declarationContext *ctx) {
+	DEBUG_ENTER("visitAbstract_monitor_declaration");
+	ast::ITypeIdentifier *super_t = 0;
+
+	PSSParser::Monitor_declarationContext *decl_ctx = ctx->monitor_declaration();
+
+	if (decl_ctx->monitor_super_spec()) {
+		super_t = mkTypeId(decl_ctx->monitor_super_spec()->type_identifier());
+	}
+
+	ast::IMonitor *monitor = m_factory->mkMonitor(
+		mkId(decl_ctx->monitor_identifier()->identifier()),
+		super_t);
+	monitor->setIs_abstract(true);
+    setLoc(monitor, decl_ctx->start);
+
+	if (decl_ctx->template_param_decl_list()) {
+        monitor->setParams(mkTypeParamDecl(decl_ctx->template_param_decl_list()));
+	}
+
+	addChild(monitor, decl_ctx->start, decl_ctx->TOK_RCBRACE()->getSymbol());
+	push_scope(monitor);
+
+	std::vector<PSSParser::Monitor_body_itemContext *> items = decl_ctx->monitor_body_item();
+
+	for (std::vector<PSSParser::Monitor_body_itemContext *>::const_iterator
+		it=items.begin();
+		it!=items.end(); it++) {
+		(*it)->accept(this);
+	}
+
+	pop_scope();
+
+	DEBUG_LEAVE("visitAbstract_monitor_declaration");
+	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitMonitor_activity_declaration(PSSParser::Monitor_activity_declarationContext *ctx) {
+	DEBUG_ENTER("visitMonitor_activity_declaration");
+
+	ast::IMonitorActivityDecl *activity = m_factory->mkMonitorActivityDecl("");
+    setLoc(activity, ctx->start);
+
+	addChild(activity, ctx->start, ctx->TOK_RCBRACE()->getSymbol());
+
+	// TODO: Handle monitor activity statements
+	std::vector<PSSParser::Monitor_activity_stmtContext *> stmts = ctx->monitor_activity_stmt();
+	for (std::vector<PSSParser::Monitor_activity_stmtContext *>::const_iterator
+		it=stmts.begin();
+		it!=stmts.end(); it++) {
+		// (*it)->accept(this);
+	}
+
+	DEBUG_LEAVE("visitMonitor_activity_declaration");
+	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitMonitor_activity_sequence_block_stmt(PSSParser::Monitor_activity_sequence_block_stmtContext *ctx) {
+	DEBUG_ENTER("visitMonitor_activity_sequence_block_stmt");
+
+	ast::IMonitorActivitySequence *seq = m_factory->mkMonitorActivitySequence("");
+    setLoc(seq, ctx->start);
+
+	addChild(seq, ctx->start, ctx->TOK_RCBRACE()->getSymbol());
+
+	// Monitor activity statements - for now, just traverse them
+	// TODO: Properly handle monitor activity statements once visitor pattern is clear
+	std::vector<PSSParser::Monitor_activity_stmtContext *> stmts = ctx->monitor_activity_stmt();
+	for (std::vector<PSSParser::Monitor_activity_stmtContext *>::const_iterator
+		it=stmts.begin();
+		it!=stmts.end(); it++) {
+		// (*it)->accept(this);
+	}
+
+	DEBUG_LEAVE("visitMonitor_activity_sequence_block_stmt");
+	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitMonitor_activity_concat_stmt(PSSParser::Monitor_activity_concat_stmtContext *ctx) {
+	DEBUG_ENTER("visitMonitor_activity_concat_stmt");
+
+	// Concat is represented as a scope containing statements
+	ast::IMonitorActivitySequence *concat = m_factory->mkMonitorActivitySequence("");
+    setLoc(concat, ctx->start);
+
+	addChild(concat, ctx->start, ctx->TOK_RCBRACE()->getSymbol());
+
+	// TODO: Handle monitor activity statements
+	std::vector<PSSParser::Monitor_activity_stmtContext *> stmts = ctx->monitor_activity_stmt();
+	for (std::vector<PSSParser::Monitor_activity_stmtContext *>::const_iterator
+		it=stmts.begin();
+		it!=stmts.end(); it++) {
+		// (*it)->accept(this);
+	}
+
+	DEBUG_LEAVE("visitMonitor_activity_concat_stmt");
+	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitMonitor_activity_eventually_stmt(PSSParser::Monitor_activity_eventually_stmtContext *ctx) {
+	DEBUG_ENTER("visitMonitor_activity_eventually_stmt");
+
+	// For now, create a simple eventually statement with null condition
+	// TODO: Handle condition properly when spec is clearer
+	ast::IMonitorActivityEventually *eventually = m_factory->mkMonitorActivityEventually(
+		0,  // condition
+		0   // body
+	);
+    setLoc(eventually, ctx->start);
+
+	// Add to current scope as a child
+	ast::ISymbolScope *sym_scope = dynamic_cast<ast::ISymbolScope *>(scope());
+	if (sym_scope) {
+		eventually->setIndex(sym_scope->getChildren().size());
+		sym_scope->getChildren().push_back(ast::IScopeChildUP(eventually));
+	}
+
+	DEBUG_LEAVE("visitMonitor_activity_eventually_stmt");
+	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitMonitor_activity_overlap_stmt(PSSParser::Monitor_activity_overlap_stmtContext *ctx) {
+	DEBUG_ENTER("visitMonitor_activity_overlap_stmt");
+
+	// Overlap is represented as a scope containing statements
+	ast::IMonitorActivitySequence *overlap = m_factory->mkMonitorActivitySequence("");
+    setLoc(overlap, ctx->start);
+
+	addChild(overlap, ctx->start, ctx->TOK_RCBRACE()->getSymbol());
+
+	// TODO: Handle monitor activity statements
+	std::vector<PSSParser::Monitor_activity_stmtContext *> stmts = ctx->monitor_activity_stmt();
+	for (std::vector<PSSParser::Monitor_activity_stmtContext *>::const_iterator
+		it=stmts.begin();
+		it!=stmts.end(); it++) {
+		// (*it)->accept(this);
+	}
+
+	DEBUG_LEAVE("visitMonitor_activity_overlap_stmt");
+	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitMonitor_activity_schedule_stmt(PSSParser::Monitor_activity_schedule_stmtContext *ctx) {
+	DEBUG_ENTER("visitMonitor_activity_schedule_stmt");
+
+	ast::IMonitorActivitySchedule *schedule = m_factory->mkMonitorActivitySchedule("");
+    setLoc(schedule, ctx->start);
+
+	addChild(schedule, ctx->start, ctx->TOK_RCBRACE()->getSymbol());
+
+	// TODO: Handle monitor activity statements
+	std::vector<PSSParser::Monitor_activity_stmtContext *> stmts = ctx->monitor_activity_stmt();
+	for (std::vector<PSSParser::Monitor_activity_stmtContext *>::const_iterator
+		it=stmts.begin();
+		it!=stmts.end(); it++) {
+		// (*it)->accept(this);
+	}
+
+	DEBUG_LEAVE("visitMonitor_activity_schedule_stmt");
+	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitMonitor_activity_monitor_traversal_stmt(PSSParser::Monitor_activity_monitor_traversal_stmtContext *ctx) {
+	DEBUG_ENTER("visitMonitor_activity_monitor_traversal_stmt");
+
+	// TODO: Properly construct target reference path
+	ast::IExprRefPath *target = 0;
+	ast::IConstraintStmt *with_c = 0;
+
+	ast::IMonitorActivityMonitorTraversal *traversal = m_factory->mkMonitorActivityMonitorTraversal(
+		target,
+		with_c
+	);
+    setLoc(traversal, ctx->start);
+
+	// Add to current scope as a child
+	ast::ISymbolScope *sym_scope = dynamic_cast<ast::ISymbolScope *>(scope());
+	if (sym_scope) {
+		traversal->setIndex(sym_scope->getChildren().size());
+		sym_scope->getChildren().push_back(ast::IScopeChildUP(traversal));
+	}
+
+	DEBUG_LEAVE("visitMonitor_activity_monitor_traversal_stmt");
+	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitCover_stmt(PSSParser::Cover_stmtContext *ctx) {
+	DEBUG_ENTER("visitCover_stmt");
+
+	// TODO: Implement cover statement visitor
+	// For now, just create a placeholder
+	DEBUG("Cover statement visitor not yet implemented");
+
+	DEBUG_LEAVE("visitCover_stmt");
 	return 0;
 }
 
@@ -1287,6 +1545,33 @@ antlrcpp::Any AstBuilderInt::visitActivity_repeat_stmt(PSSParser::Activity_repea
 	m_activity_stmt = stmt;
 
 	DEBUG_LEAVE("visitActivity_repeat_stmt");
+	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitActivity_atomic_block_stmt(PSSParser::Activity_atomic_block_stmtContext *ctx) {
+	DEBUG_ENTER("visitActivity_atomic_block_stmt");
+
+	// Create a sequence to hold the atomic block statements
+	ast::IActivitySequence *seq = m_factory->mkActivitySequence("");
+	
+	std::vector<PSSParser::Activity_stmt_annContext *> stmts = ctx->activity_stmt_ann();
+	for (std::vector<PSSParser::Activity_stmt_annContext *>::const_iterator
+		it=stmts.begin();
+		it!=stmts.end(); it++) {
+		addActivityStmt(seq, *it);
+	}
+
+	ast::IActivityAtomicBlock *atomic = m_factory->mkActivityAtomicBlock(seq);
+	setLoc(atomic, ctx->start);
+
+	if (m_labeled_activity_id) {
+		atomic->setLabel(m_labeled_activity_id);
+		m_labeled_activity_id = 0;
+	}
+
+	m_activity_stmt = atomic;
+
+	DEBUG_LEAVE("visitActivity_atomic_block_stmt");
 	return 0;
 }
 
@@ -1491,6 +1776,10 @@ antlrcpp::Any AstBuilderInt::visitReference_type(PSSParser::Reference_typeContex
 	ast::IDataTypeUserDefined *type = 0;
 	ctx->entity_type_identifier()->accept(this);
 	type = dynamic_cast<ast::IDataTypeUserDefined *>(m_type);
+
+	if (!type && m_type) {
+		DEBUG_ERROR("visitReference_type: entity_type_identifier returned non-user-defined type");
+	}
 
 	ast::IDataTypeRef *ref = m_factory->mkDataTypeRef(type);
 
@@ -2897,9 +3186,12 @@ ast::IExprMemberPathElem *AstBuilderInt::mkMemberPathElem(
         id,
         params);
 
-    if (ctx->expression().size()) {
-        for (uint32_t i=0; i<ctx->expression().size(); i++) {
-            subscript = mkExpr(ctx->expression(i));
+    if (ctx->member_path_elem_index().size()) {
+        for (uint32_t i=0; i<ctx->member_path_elem_index().size(); i++) {
+            auto idx_ctx = ctx->member_path_elem_index(i);
+            // For now, just handle the first expression (index or start of range)
+            // TODO: Handle substring range with ELIPSIS
+            subscript = mkExpr(idx_ctx->expression(0));
             elem->getSubscript().push_back(ast::IExprUP(subscript));
         }
     }

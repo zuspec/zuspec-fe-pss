@@ -138,6 +138,11 @@ classes:
   - ProceduralStmtYield:
     - super: ExecStmt
     - data: []
+  - ProceduralStmtRandomize:
+    - super: ExecStmt
+    - data:
+      - target: UP<Expr>
+      - constraints: list<UP<ConstraintStmt>>
   - ProceduralStmtSymbolBodyScope:
     - super: SymbolScope
     - data:

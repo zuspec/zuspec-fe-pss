@@ -18,6 +18,7 @@
  * Created on:
  *     Author:
  */
+#include <set>
 #include "dmgr/impl/DebugMacros.h"
 #include "TaskFindPathElem.h"
 #include "TaskLinkActionCompRefFields.h"
@@ -287,7 +288,38 @@ void TaskResolveRefs::visitExprRefPathContext(ast::IExprRefPathContext *i) {
 
     DEBUG("target_c=%p target_s=%p", target_c, target_s);
 
-    if (!target_s && i->getHier_id()->getElems().size() > 1) {
+    // Check if target_c is a field or local variable with a built-in type that has methods (e.g., string)
+    bool is_builtin_with_methods = false;
+    ast::IDataType *target_type = 0;
+    
+    if (!target_s && target_c) {
+        // Check if it's a field declaration
+        ast::IField *field = dynamic_cast<ast::IField *>(target_c);
+        if (field && field->getType()) {
+            target_type = field->getType();
+        }
+        
+        // Check if it's a procedural data declaration (local variable)
+        if (!target_type) {
+            ast::IProceduralStmtDataDeclaration *var_decl = 
+                dynamic_cast<ast::IProceduralStmtDataDeclaration *>(target_c);
+            if (var_decl && var_decl->getDatatype()) {
+                target_type = var_decl->getDatatype();
+            }
+        }
+        
+        // Check if the type is a string
+        if (target_type) {
+            ast::IDataTypeString *string_type = dynamic_cast<ast::IDataTypeString *>(target_type);
+            if (string_type) {
+                is_builtin_with_methods = true;
+                DEBUG("Found string variable '%s' - allowing method calls", 
+                    i->getHier_id()->getElems().at(0)->getId()->getId().c_str());
+            }
+        }
+    }
+
+    if (!target_s && !is_builtin_with_methods && i->getHier_id()->getElems().size() > 1) {
         m_ctxt->addMarker(
             MarkerSeverityE::Error,
             i->getHier_id()->getElems().at(0)->getId()->getLocation(),
@@ -349,6 +381,41 @@ void TaskResolveRefs::visitExprRefPathContext(ast::IExprRefPathContext *i) {
         if (target_s && target_s->getOpaque()) {
             DEBUG("Note: scope is opaque ; ending hierarchical search");
             break;
+        }
+
+        // Special handling for string methods
+        if (!target_s && is_builtin_with_methods && ii == 1) {
+            // This is a method call on a string type - validate method name
+            std::string method_name = elem->getId()->getId();
+            static const std::set<std::string> valid_string_methods = {
+                "size", "find", "find_last", "find_all", 
+                "lower", "upper", "split", "chars"
+            };
+            
+            if (valid_string_methods.find(method_name) != valid_string_methods.end()) {
+                DEBUG("Valid string method: %s", method_name.c_str());
+                // Set a sentinel value to indicate this is a built-in method
+                elem->setTarget(-2); // Use -2 to distinguish from unresolved (-1)
+                // Resolve parameters if present
+                if (elem->getParams()) {
+                    DEBUG_ENTER("Resolve string method parameters");
+                    for (std::vector<ast::IExprUP>::const_iterator
+                        it=elem->getParams()->getParameters().begin();
+                        it!=elem->getParams()->getParameters().end(); it++) {
+                        (*it)->accept(m_this);
+                    }
+                    DEBUG_LEAVE("Resolve string method parameters");
+                }
+                // String methods don't chain, so we're done
+                break;
+            } else {
+                m_ctxt->addErrorMarker(
+                    elem->getId()->getLocation(),
+                    "Unknown string method '%s'", 
+                    method_name.c_str());
+                DEBUG("ERROR: Unknown string method %s", method_name.c_str());
+                break;
+            }
         }
 
         TaskFindPathElem::Result res = TaskFindPathElem(

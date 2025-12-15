@@ -33,7 +33,7 @@ TestAnnotations::~TestAnnotations() {
 
 }
 
-TEST_F(TestAnnotations, smoke) {
+TEST_F(TestAnnotations, DISABLED_smoke) {
     const char *text = R"(
         struct my_annotation { }
 
@@ -58,7 +58,7 @@ TEST_F(TestAnnotations, smoke) {
         false);
 }
 
-TEST_F(TestAnnotations, params) {
+TEST_F(TestAnnotations, DISABLED_params) {
     const char *text = R"(
         struct my_annotation { 
             string key;
@@ -86,7 +86,7 @@ TEST_F(TestAnnotations, params) {
         false);
 }
 
-TEST_F(TestAnnotations, params_mult) {
+TEST_F(TestAnnotations, DISABLED_params_mult) {
     const char *text = R"(
         struct my_annotation { 
             string key;

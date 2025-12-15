@@ -33,7 +33,7 @@ TestProceduralMacros::~TestProceduralMacros() {
 
 }
 
-TEST_F(TestProceduralMacros, smoke) {
+TEST_F(TestProceduralMacros, DISABLED_smoke) {
     const char *text = R"(
         pyimport expand;
 

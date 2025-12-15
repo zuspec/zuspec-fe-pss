@@ -42,6 +42,8 @@ public:
 
     virtual void visitDataTypeEnum(ast::IDataTypeEnum *i) override;
 
+    virtual void visitDataTypeRef(ast::IDataTypeRef *i) override;
+
     virtual void visitDataTypeUserDefined(ast::IDataTypeUserDefined *i) override;
 
     virtual void visitEnumItem(ast::IEnumItem *i) override;

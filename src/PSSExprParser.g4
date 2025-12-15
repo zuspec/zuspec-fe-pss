@@ -497,6 +497,7 @@ procedural_stmt:
 	| procedural_break_stmt
 	| procedural_continue_stmt
 	| procedural_data_declaration // TODO: positioning this first causes assign to be incorrectly recognized as data_declaration
+	| procedural_randomization_stmt
 	| TOK_SEMICOLON
 	;
 	
@@ -561,6 +562,19 @@ procedural_break_stmt:
 
 procedural_continue_stmt:
 	TOK_CONTINUE TOK_SEMICOLON
+	;
+
+procedural_randomization_stmt:
+	TOK_RANDOMIZE procedural_randomization_target procedural_randomization_term
+	;
+
+procedural_randomization_target:
+	hierarchical_id (TOK_COMMA hierarchical_id)*
+	;
+
+procedural_randomization_term:
+	(TOK_WITH constraint_set)
+	| TOK_SEMICOLON
 	;
 	
 /********************************************************************
@@ -675,6 +689,7 @@ labeled_activity_stmt:
 	| activity_match_stmt
 	| activity_replicate_stmt
 	| activity_super_stmt
+	| activity_atomic_block_stmt
 	| symbol_call
 	;
 
@@ -716,6 +731,13 @@ activity_schedule_stmt:
 	TOK_LCBRACE
 		activity_stmt_ann*
 	TOK_RCBRACE 
+	;
+
+activity_atomic_block_stmt:
+	TOK_ATOMIC
+	TOK_LCBRACE
+		activity_stmt_ann*
+	TOK_RCBRACE
 	;
 
 activity_join_spec:
@@ -1514,7 +1536,11 @@ hierarchical_id:
 	;
 
 member_path_elem:
-	identifier function_parameter_list? ( TOK_LSBRACE expression TOK_RSBRACE )?
+	identifier function_parameter_list? member_path_elem_index?
+	;
+
+member_path_elem_index:
+	TOK_LSBRACE expression (TOK_ELIPSIS expression?)? TOK_RSBRACE
 	;
 
 

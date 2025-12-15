@@ -121,7 +121,218 @@ TEST_F(TestFunctionDecl, builtin) {
 
     std::string qname = TaskGetName().get(write64, true);
     ASSERT_EQ(qname, "addr_reg_pkg::write64");
-}    
+}
+
+TEST_F(TestFunctionDecl, function_with_params) {
+    const char *text = R"(
+        function int add(int a, int b) {
+            return a + b;
+        }
+        
+        component pss_top {
+            action Entry {
+            }
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "function_with_params.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestFunctionDecl, function_param_reference) {
+    const char *text = R"(
+        function int double_value(int x) {
+            int result;
+            result = x * 2;
+            return result;
+        }
+        
+        component pss_top {
+            action Entry {
+            }
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "function_param_reference.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestFunctionDecl, function_multiple_params) {
+    const char *text = R"(
+        function int calculate(int a, int b, int c) {
+            int temp;
+            temp = a + b;
+            temp = temp * c;
+            return temp;
+        }
+        
+        component pss_top {
+            action Entry {
+            }
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "function_multiple_params.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestFunctionDecl, function_calls_function) {
+    const char *text = R"(
+        function int helper(int x) {
+            return x + 1;
+        }
+        
+        function int caller(int y) {
+            int result;
+            result = helper(y);
+            return result;
+        }
+        
+        component pss_top {
+            action Entry {
+            }
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "function_calls_function.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestFunctionDecl, target_function) {
+    const char *text = R"(
+        target function int sum(int a, int b) {
+            int res;
+            res = 0;
+            repeat(b) {
+                res = res + a;
+            }
+            return res;
+        }
+        
+        component pss_top {
+            action Entry {
+            }
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "target_function.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestFunctionDecl, solve_function) {
+    const char *text = R"(
+        solve function int factorial(int n) {
+            int result;
+            result = 1;
+            repeat (i : n) {
+                result = result * (i + 1);
+            }
+            return result;
+        }
+        
+        component pss_top {
+            action Entry {
+            }
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "solve_function.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestFunctionDecl, void_function) {
+    const char *text = R"(
+        function void print_value(int val) {
+            int temp;
+            temp = val;
+        }
+        
+        component pss_top {
+            action Entry {
+            }
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "void_function.pss",
+        files,
+        root,
+        false);
+}
 
 }
 }
