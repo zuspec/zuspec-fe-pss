@@ -7,8 +7,8 @@ yum install -y java-11-openjdk-devel uuid-devel libuuid-devel
 echo "BUILD_NUM=${BUILD_NUM}" >> python/zsp_parser/__build_num__.py
 ${IVPM_PYTHON} -m pip install -U ivpm cython setuptools
 
-# Clean any stale download artifacts
-rm -rf packages/.download
+# Clean any stale artifacts that might interfere with ivpm
+rm -rf packages/.download packages/antlr4-tools.jar packages/antlr4-cpp-runtime
 
 ${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages
 
@@ -37,7 +37,15 @@ fi
 if [ ! -f packages/antlr4-tools.jar ]; then
     echo "ERROR: ANTLR tools jar not downloaded"
     ls -la packages/ | grep antlr || echo "No ANTLR files found"
-    exit 1
+    # Try downloading manually
+    cd packages
+    curl -L -o antlr4-tools.jar https://www.antlr.org/download/antlr-4.13.2-complete.jar
+    cd ..
+    # Verify again
+    if [ ! -f packages/antlr4-tools.jar ]; then
+        echo "ERROR: Failed to download ANTLR tools jar"
+        exit 1
+    fi
 fi
 
 PYTHON=./packages/python/bin/python
