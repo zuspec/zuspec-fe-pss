@@ -12,6 +12,21 @@ rm -rf packages/.download
 
 ${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages
 
+# Workaround for ivpm zip extraction issue - manually extract ANTLR C++ runtime if needed
+if [ ! -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
+    echo "ANTLR C++ runtime extraction incomplete, manually extracting..."
+    cd packages
+    # Download the zip file if it doesn't exist
+    if [ ! -f antlr4-cpp-runtime-source.zip ]; then
+        curl -L -o antlr4-cpp-runtime-source.zip https://www.antlr.org/download/antlr4-cpp-runtime-4.13.2-source.zip
+    fi
+    # Remove the incomplete directory
+    rm -rf antlr4-cpp-runtime
+    # Extract fresh
+    unzip -q antlr4-cpp-runtime-source.zip -d antlr4-cpp-runtime
+    cd ..
+fi
+
 # Verify ANTLR extraction
 if [ ! -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
     echo "ERROR: ANTLR C++ runtime not properly extracted"
