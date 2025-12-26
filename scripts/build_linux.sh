@@ -12,6 +12,19 @@ rm -rf packages/.download
 
 ${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages
 
+# Verify ANTLR extraction
+if [ ! -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
+    echo "ERROR: ANTLR C++ runtime not properly extracted"
+    ls -la packages/antlr4-cpp-runtime/ || echo "Directory does not exist"
+    exit 1
+fi
+
+if [ ! -f packages/antlr4-tools.jar ]; then
+    echo "ERROR: ANTLR tools jar not downloaded"
+    ls -la packages/ | grep antlr || echo "No ANTLR files found"
+    exit 1
+fi
+
 PYTHON=./packages/python/bin/python
 ${PYTHON} -m pip install twine auditwheel ninja wheel cython
 
