@@ -6,6 +6,10 @@ yum install -y java-11-openjdk-devel uuid-devel libuuid-devel
 
 echo "BUILD_NUM=${BUILD_NUM}" >> python/zsp_parser/__build_num__.py
 ${IVPM_PYTHON} -m pip install -U ivpm cython setuptools
+
+# Clean any stale download artifacts
+rm -rf packages/.download
+
 ${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages
 
 PYTHON=./packages/python/bin/python
