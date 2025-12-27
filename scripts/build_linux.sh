@@ -7,9 +7,6 @@ yum install -y java-11-openjdk-devel uuid-devel libuuid-devel
 echo "BUILD_NUM=${BUILD_NUM}" >> python/zsp_parser/__build_num__.py
 ${IVPM_PYTHON} -m pip install -U ivpm cython setuptools
 
-# Clean any stale artifacts that might interfere with ivpm
-rm -rf packages/.download packages/antlr4-tools.jar packages/antlr4-cpp-runtime
-
 ${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages
 
 # Workaround for ivpm zip extraction issue - manually extract ANTLR C++ runtime if needed

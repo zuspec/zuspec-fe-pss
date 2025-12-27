@@ -77,5 +77,5 @@ package:
     - name: antlr4-cpp-runtime
       url: https://www.antlr.org/download/antlr4-cpp-runtime-4.13.2-source.zip
     - name: debug-mgr
-      url: https://github.com/mballance/debug-mgr.git
+      src: pypi
 
