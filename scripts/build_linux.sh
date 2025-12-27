@@ -12,6 +12,13 @@ ${IVPM_PYTHON} -m pip install -U ivpm cython setuptools
 # Run ivpm update - should now work properly with the race condition fix
 ${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages
 
+# Debug: Check what's actually in the ANTLR directory
+echo "=== DEBUG: Checking ANTLR directory structure ==="
+ls -la packages/antlr4-cpp-runtime/ || echo "Directory does not exist"
+echo "=== Looking for CMakeLists.txt ==="
+find packages/antlr4-cpp-runtime -name "CMakeLists.txt" -type f 2>/dev/null || echo "No CMakeLists.txt found"
+echo "=== END DEBUG ==="
+
 PYTHON=./packages/python/bin/python
 ${PYTHON} -m pip install twine auditwheel ninja wheel cython
 
