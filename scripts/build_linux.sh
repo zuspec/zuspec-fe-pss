@@ -7,7 +7,37 @@ yum install -y java-11-openjdk-devel uuid-devel libuuid-devel
 echo "BUILD_NUM=${BUILD_NUM}" >> python/zsp_parser/__build_num__.py
 ${IVPM_PYTHON} -m pip install -U ivpm cython setuptools
 
-${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages
+# Run ivpm update, ignoring errors due to .download conflicts
+${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages || true
+
+# Clean up any .download artifacts that might have been left
+rm -rf packages/.download
+
+# Manually install ANTLR components if ivpm failed
+if [ ! -f packages/antlr4-tools.jar ]; then
+    echo "Manually downloading ANTLR tools jar..."
+    curl -L -o packages/antlr4-tools.jar https://www.antlr.org/download/antlr-4.13.2-complete.jar
+fi
+
+if [ ! -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
+    echo "Manually extracting ANTLR C++ runtime..."
+    cd packages
+    curl -L -o antlr4-cpp-runtime-source.zip https://www.antlr.org/download/antlr4-cpp-runtime-4.13.2-source.zip
+    rm -rf antlr4-cpp-runtime
+    unzip -q antlr4-cpp-runtime-source.zip -d antlr4-cpp-runtime
+    cd ..
+fi
+
+# Verify critical packages
+if [ ! -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
+    echo "ERROR: ANTLR C++ runtime not available"
+    exit 1
+fi
+
+if [ ! -f packages/antlr4-tools.jar ]; then
+    echo "ERROR: ANTLR tools jar not available"
+    exit 1
+fi
 
 # Workaround for ivpm zip extraction issue - manually extract ANTLR C++ runtime if needed
 if [ ! -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
