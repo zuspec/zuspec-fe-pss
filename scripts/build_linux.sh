@@ -6,8 +6,8 @@ yum install -y java-11-openjdk-devel uuid-devel libuuid-devel
 
 echo "BUILD_NUM=${BUILD_NUM}" >> python/zsp_parser/__build_num__.py
 
-# Install latest ivpm (now includes fix for .download race condition)
-${IVPM_PYTHON} -m pip install -U ivpm cython setuptools
+# Install ivpm with zip extraction fixes
+${IVPM_PYTHON} -m pip install -U git+https://github.com/mballance/ivpm.git@fix-zip-extraction cython setuptools
 
 # Run ivpm update - should now work properly with the race condition fix
 ${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages
