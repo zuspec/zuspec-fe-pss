@@ -13,11 +13,12 @@ ${IVPM_PYTHON} -m pip install -U ivpm cython setuptools
 ${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages
 
 # Debug: Check what's actually in the ANTLR directory
-echo "=== DEBUG: Checking ANTLR directory structure ==="
-ls -la packages/antlr4-cpp-runtime/ || echo "Directory does not exist"
-echo "=== Looking for CMakeLists.txt ==="
-find packages/antlr4-cpp-runtime -name "CMakeLists.txt" -type f 2>/dev/null || echo "No CMakeLists.txt found"
-echo "=== END DEBUG ==="
+echo "=== DEBUG START ==="
+echo "Checking packages/antlr4-cpp-runtime directory..."
+ls -la packages/antlr4-cpp-runtime/
+echo "Looking for CMakeLists.txt..."
+find packages/antlr4-cpp-runtime -name "CMakeLists.txt" -type f 2>&1
+echo "=== DEBUG END ==="
 
 PYTHON=./packages/python/bin/python
 ${PYTHON} -m pip install twine auditwheel ninja wheel cython
