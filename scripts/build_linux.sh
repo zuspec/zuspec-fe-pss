@@ -20,6 +20,18 @@ echo "Looking for CMakeLists.txt..."
 find packages/antlr4-cpp-runtime -name "CMakeLists.txt" -type f 2>&1
 echo "=== DEBUG END ==="
 
+# Additional verification right before build
+echo "=== PRE-BUILD CHECK ==="
+echo "Checking if CMakeLists.txt exists just before setup.py..."
+if [ -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
+    echo "YES - CMakeLists.txt exists"
+    ls -l packages/antlr4-cpp-runtime/CMakeLists.txt
+else
+    echo "NO - CMakeLists.txt does NOT exist!"
+    ls -la packages/antlr4-cpp-runtime/ || echo "Directory doesn't exist"
+fi
+echo "=== END PRE-BUILD CHECK ==="
+
 PYTHON=./packages/python/bin/python
 ${PYTHON} -m pip install twine auditwheel ninja wheel cython
 
