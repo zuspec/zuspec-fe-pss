@@ -5,87 +5,12 @@ yum install -y glibc-static
 yum install -y java-11-openjdk-devel uuid-devel libuuid-devel
 
 echo "BUILD_NUM=${BUILD_NUM}" >> python/zsp_parser/__build_num__.py
-${IVPM_PYTHON} -m pip install -U ivpm cython setuptools
 
-# Run ivpm update, ignoring errors due to .download conflicts
-${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages || true
+# Install fixed ivpm with race condition fix from our fork
+${IVPM_PYTHON} -m pip install -U git+https://github.com/mballance/ivpm.git@fix-download-race-condition cython setuptools
 
-# Clean up any .download artifacts that might have been left
-rm -rf packages/.download
-
-# Manually install ANTLR components if ivpm failed
-if [ ! -f packages/antlr4-tools.jar ]; then
-    echo "Manually downloading ANTLR tools jar..."
-    curl -L -o packages/antlr4-tools.jar https://www.antlr.org/download/antlr-4.13.2-complete.jar
-fi
-
-if [ ! -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
-    echo "Manually extracting ANTLR C++ runtime..."
-    cd packages
-    curl -L -o antlr4-cpp-runtime-source.zip https://www.antlr.org/download/antlr4-cpp-runtime-4.13.2-source.zip
-    rm -rf antlr4-cpp-runtime
-    unzip -q antlr4-cpp-runtime-source.zip -d antlr4-cpp-runtime
-    cd ..
-fi
-
-# Verify critical packages
-if [ ! -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
-    echo "ERROR: ANTLR C++ runtime not available"
-    exit 1
-fi
-
-if [ ! -f packages/antlr4-tools.jar ]; then
-    echo "ERROR: ANTLR tools jar not available"
-    exit 1
-fi
-
-# Ensure debug-mgr is installed in the packaged Python environment
-# ivpm sometimes fails to install it properly, so we do it explicitly
-echo "Ensuring debug-mgr is installed..."
-PYTHON=./packages/python/bin/python
-${PYTHON} -m pip install debug-mgr --upgrade || echo "Warning: debug-mgr install had issues"
-
-# Verify debug-mgr is importable
-${PYTHON} -c "import debug_mgr; print('debug-mgr version:', debug_mgr.__file__)" || {
-    echo "ERROR: debug-mgr not importable after installation"
-    exit 1
-}
-
-# Workaround for ivpm zip extraction issue - manually extract ANTLR C++ runtime if needed
-if [ ! -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
-    echo "ANTLR C++ runtime extraction incomplete, manually extracting..."
-    cd packages
-    # Download the zip file if it doesn't exist
-    if [ ! -f antlr4-cpp-runtime-source.zip ]; then
-        curl -L -o antlr4-cpp-runtime-source.zip https://www.antlr.org/download/antlr4-cpp-runtime-4.13.2-source.zip
-    fi
-    # Remove the incomplete directory
-    rm -rf antlr4-cpp-runtime
-    # Extract fresh
-    unzip -q antlr4-cpp-runtime-source.zip -d antlr4-cpp-runtime
-    cd ..
-fi
-
-# Verify ANTLR extraction
-if [ ! -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
-    echo "ERROR: ANTLR C++ runtime not properly extracted"
-    ls -la packages/antlr4-cpp-runtime/ || echo "Directory does not exist"
-    exit 1
-fi
-
-if [ ! -f packages/antlr4-tools.jar ]; then
-    echo "ERROR: ANTLR tools jar not downloaded"
-    ls -la packages/ | grep antlr || echo "No ANTLR files found"
-    # Try downloading manually
-    cd packages
-    curl -L -o antlr4-tools.jar https://www.antlr.org/download/antlr-4.13.2-complete.jar
-    cd ..
-    # Verify again
-    if [ ! -f packages/antlr4-tools.jar ]; then
-        echo "ERROR: Failed to download ANTLR tools jar"
-        exit 1
-    fi
-fi
+# Run ivpm update - should now work without .download conflicts
+${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages
 
 PYTHON=./packages/python/bin/python
 ${PYTHON} -m pip install twine auditwheel ninja wheel cython
