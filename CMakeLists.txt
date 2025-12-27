@@ -80,6 +80,37 @@ include(ivpm)
 
 Ivpm_AddPythonExtProject(debug-mgr debug_mgr)
 
+# Fallback: If debug_mgr_INCDIR is empty, try to find it manually
+if (NOT debug_mgr_INCDIR OR debug_mgr_INCDIR STREQUAL "")
+    message("Warning: debug_mgr_INCDIR not set by ivpm, attempting manual detection")
+    execute_process(
+        COMMAND ${PYTHON} -c "import debug_mgr, os; print(os.path.join(os.path.dirname(debug_mgr.__file__), 'share', 'include'))"
+        OUTPUT_VARIABLE debug_mgr_INCDIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if (debug_mgr_INCDIR)
+        message("Found debug_mgr_INCDIR: ${debug_mgr_INCDIR}")
+    else()
+        message(FATAL_ERROR "Could not find debug-mgr include directory")
+    endif()
+endif()
+
+if (NOT debug_mgr_LIBDIR OR debug_mgr_LIBDIR STREQUAL "")
+    message("Warning: debug_mgr_LIBDIR not set by ivpm, attempting manual detection")
+    execute_process(
+        COMMAND ${PYTHON} -c "import debug_mgr, os; print(os.path.dirname(debug_mgr.__file__))"
+        OUTPUT_VARIABLE debug_mgr_LIBDIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if (debug_mgr_LIBDIR)
+        message("Found debug_mgr_LIBDIR: ${debug_mgr_LIBDIR}")
+    else()
+        message(FATAL_ERROR "Could not find debug-mgr library directory")
+    endif()
+endif()
+
 message("Note: CMAKE_INSTALL_PREFIX set to ${CMAKE_INSTALL_PREFIX}")
 
 ExternalProject_Add(libantlr4
