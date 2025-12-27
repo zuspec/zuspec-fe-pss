@@ -87,12 +87,14 @@ if (NOT debug_mgr_INCDIR OR debug_mgr_INCDIR STREQUAL "")
         COMMAND ${PYTHON} -c "import debug_mgr, os; print(os.path.join(os.path.dirname(debug_mgr.__file__), 'share', 'include'))"
         OUTPUT_VARIABLE debug_mgr_INCDIR
         OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
+        ERROR_VARIABLE debug_mgr_err
+        RESULT_VARIABLE debug_mgr_result
     )
-    if (debug_mgr_INCDIR)
+    if (debug_mgr_result EQUAL 0 AND debug_mgr_INCDIR)
         message("Found debug_mgr_INCDIR: ${debug_mgr_INCDIR}")
     else()
-        message(FATAL_ERROR "Could not find debug-mgr include directory")
+        message("Python command failed with: ${debug_mgr_err}")
+        message(FATAL_ERROR "Could not find debug-mgr include directory. Please ensure debug-mgr is installed.")
     endif()
 endif()
 
@@ -102,12 +104,14 @@ if (NOT debug_mgr_LIBDIR OR debug_mgr_LIBDIR STREQUAL "")
         COMMAND ${PYTHON} -c "import debug_mgr, os; print(os.path.dirname(debug_mgr.__file__))"
         OUTPUT_VARIABLE debug_mgr_LIBDIR
         OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
+        ERROR_VARIABLE debug_mgr_lib_err
+        RESULT_VARIABLE debug_mgr_lib_result
     )
-    if (debug_mgr_LIBDIR)
+    if (debug_mgr_lib_result EQUAL 0 AND debug_mgr_LIBDIR)
         message("Found debug_mgr_LIBDIR: ${debug_mgr_LIBDIR}")
     else()
-        message(FATAL_ERROR "Could not find debug-mgr library directory")
+        message("Python command failed with: ${debug_mgr_lib_err}")
+        message(FATAL_ERROR "Could not find debug-mgr library directory. Please ensure debug-mgr is installed.")
     endif()
 endif()
 

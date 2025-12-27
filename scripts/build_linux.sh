@@ -39,6 +39,18 @@ if [ ! -f packages/antlr4-tools.jar ]; then
     exit 1
 fi
 
+# Ensure debug-mgr is installed in the packaged Python environment
+# ivpm sometimes fails to install it properly, so we do it explicitly
+echo "Ensuring debug-mgr is installed..."
+PYTHON=./packages/python/bin/python
+${PYTHON} -m pip install debug-mgr --upgrade || echo "Warning: debug-mgr install had issues"
+
+# Verify debug-mgr is importable
+${PYTHON} -c "import debug_mgr; print('debug-mgr version:', debug_mgr.__file__)" || {
+    echo "ERROR: debug-mgr not importable after installation"
+    exit 1
+}
+
 # Workaround for ivpm zip extraction issue - manually extract ANTLR C++ runtime if needed
 if [ ! -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
     echo "ANTLR C++ runtime extraction incomplete, manually extracting..."
