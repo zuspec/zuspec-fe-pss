@@ -13,7 +13,7 @@ pythondir = os.path.join(proj_dir, "python")
 
 try:
     import sys
-    sys.path.insert(0, os.path.join(proj_dir, "python/zsp_parser"))
+    sys.path.insert(0, os.path.join(proj_dir, "python/zuspec_fe_pss"))
     from __version__ import VERSION, BASE
     base = BASE
     version = VERSION
@@ -46,7 +46,7 @@ extra_link_args = []
 # TODO: in 'src' mode, must copy extension files
 
 ast_ext = Extension(
-    "zsp_parser.ast", 
+    "zuspec_fe_pss.ast", 
     [
         os.path.join(pythondir, "ast.pyx"),
         os.path.join(pythondir, "PyBaseVisitor.cpp"),
@@ -57,7 +57,7 @@ ast_ext = Extension(
     extra_link_args=extra_link_args,
     language="c++")
 ext = Extension(
-    "zsp_parser.core", 
+    "zuspec_fe_pss.core", 
     [ os.path.join(pythondir, "core.pyx"),
         os.path.join(pythondir, "PyParserUtils.cpp"),
     ],
@@ -79,7 +79,7 @@ setup_args = dict(
     packages=find_namespace_packages(where='python'),
     package_dir={'' : 'python' },
     package_data={
-        'zsp_parser': [
+        'zuspec_fe_pss': [
             "ast.pyi",
             "ast.pxd",
             "ast_decl.pxd",
@@ -98,7 +98,7 @@ setup_args = dict(
     ext_modules=extensions,
     entry_points={
         "ivpm.pkginfo": {
-            'zuspec-parser = zsp_parser.pkginfo:PkgInfo'
+            'zuspec-parser = zuspec_fe_pss.pkginfo:PkgInfo'
         }
     },
     install_requires=[
@@ -123,11 +123,11 @@ if isSrcBuild:
     setup_args["ivpm_extdep_pkgs"] = ["debug-mgr", "ciostream"]
     setup_args["ivpm_extdep_data"] = [
         (os.path.join(proj_dir, "build", "zsp_ast", "ext", 'ast_decl.pxd'),
-            os.path.join(proj_dir, "python", "zsp_parser", 'ast_decl.pxd')),
+            os.path.join(proj_dir, "python", "zuspec_fe_pss", 'ast_decl.pxd')),
         (os.path.join(proj_dir, "build", "zsp_ast", "ext", 'ast.pyi'),
-            os.path.join(proj_dir, "python", "zsp_parser", 'ast.pyi')),
+            os.path.join(proj_dir, "python", "zuspec_fe_pss", 'ast.pyi')),
         (os.path.join(proj_dir, "build", "zsp_ast", "ext", 'ast.pxd'),
-            os.path.join(proj_dir, "python", "zsp_parser", 'ast.pxd')),
+            os.path.join(proj_dir, "python", "zuspec_fe_pss", 'ast.pxd')),
         (os.path.join(proj_dir, "build", "zsp_ast", "ext", 'ast.pyx'),
             os.path.join(proj_dir, "python", 'ast.pyx')),
         (os.path.join(proj_dir, "build", "zsp_ast", "ext", 'PyBaseVisitor.cpp'),
@@ -153,7 +153,7 @@ if isSrcBuild:
         antlr4_rt_lib = "build/{libdir}/{libpref}antlr4-runtime{dllext}"
 
     setup_args["ivpm_extra_data"] = {
-        "zsp_parser": [
+        "zuspec_fe_pss": [
             ("build/include", "share"),
             (antlr4_rt_lib, ""),
             ("build/{libdir}/{libpref}ast{dllext}", ""),

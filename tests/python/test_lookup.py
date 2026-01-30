@@ -2,8 +2,8 @@ import pytest
 from io import StringIO
 
 def build(docs):
-    from zsp_parser import core as zspp_core
-    from zsp_parser import ast as zspp_ast
+    from zuspec_fe_pss import core as zspp_core
+    from zuspec_fe_pss import ast as zspp_ast
 
     factory = zspp_core.Factory.inst()
       
@@ -48,7 +48,7 @@ def linepos(doc, idx):
     return (lineno,linepos)
 
 def test_smoke():
-    from zsp_parser import core as zspp_core
+    from zuspec_fe_pss import core as zspp_core
     doc = """
 component C {
 
@@ -86,7 +86,7 @@ component pss_top {
 
 
 def test_package_nested():
-    from zsp_parser import core as zspp_core
+    from zuspec_fe_pss import core as zspp_core
     doc = """
 component C {
 

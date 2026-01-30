@@ -1,5 +1,5 @@
 #****************************************************************************
-#* symbol_type_scope_util.py
+#* symbol_children_scope_util.py
 #*
 #* Copyright 2023 Matthew Ballance and Contributors
 #*
@@ -20,18 +20,14 @@
 #*
 #****************************************************************************
 import dataclasses as dc
-from .symbol_scope_util import SymbolScopeUtil
-import zsp_parser.core as zspp
+import zuspec_fe_pss.ast as zsp_ast
+from typing import Iterable
+from .list_iterator import ListIterator
 
 @dc.dataclass
-class SymbolTypeScopeUtil(SymbolScopeUtil):
+class SymbolChildrenScopeUtil(object):
+    obj : zsp_ast.SymbolChildrenScope
 
-    def getSuper(self):
-        super_ref = self.obj.getTarget().getSuper_t()
-        if super_ref is not None:
-            super_ref = zspp.resolveSymbolPathRef(
-                self.getRoot(),
-                super_ref.getTarget())
-        return super_ref
-
+    # def children(self) -> Iterable:
+    #     return ListIterator(self.obj.numChildren(), self.obj.getChild)
 

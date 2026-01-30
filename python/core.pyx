@@ -3,9 +3,9 @@ import ctypes
 from enum import IntEnum
 import os
 cimport debug_mgr.core as dm_core
-cimport zsp_parser.ast as ast
-cimport zsp_parser.ast_decl as ast_decl
-cimport zsp_parser.decl as decl
+cimport zuspec_fe_pss.ast as ast
+cimport zuspec_fe_pss.ast_decl as ast_decl
+cimport zuspec_fe_pss.decl as decl
 from ciostream.core cimport cistream
 from libc.stdint cimport intptr_t
 from libcpp.vector cimport vector as std_vector

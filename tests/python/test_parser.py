@@ -1,7 +1,7 @@
 import unittest
-from zsp_parser import Parser
-from zsp_parser.core import Factory
-from zsp_parser.utils import *
+from zuspec_fe_pss import Parser
+from zuspec_fe_pss.core import Factory
+from zuspec_fe_pss.utils import *
 
 class TestParser(unittest.TestCase):
     
