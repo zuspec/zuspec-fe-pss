@@ -83,6 +83,7 @@ setup_args = dict(
             "ast.pyi",
             "ast.pxd",
             "ast_decl.pxd",
+            "ast_ext.py",
             "core.pyi",
             "core.pxd",
             "decl.pxd",
