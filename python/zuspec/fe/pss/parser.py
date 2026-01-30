@@ -7,8 +7,8 @@ class ParseException(Exception):
 class Parser(object):
 
     def __init__(self):
-        import zuspec_fe_pss.core as zspp
-        import zuspec_fe_pss.ast as zsp_ast
+        import zuspec.fe.pss.core as zspp
+        import zuspec.fe.pss.ast as zsp_ast
         self.ast_f = zsp_ast.Factory.inst()
         self.parser_f = zspp.Factory.inst()
         self._root = None
@@ -17,7 +17,7 @@ class Parser(object):
         pass
 
     def parse(self, files : List[str]) -> bool:
-        import zuspec_fe_pss.core as zspp
+        import zuspec.fe.pss.core as zspp
         marker_l = self.parser_f.mkMarkerCollector()
         builder = self.parser_f.mkAstBuilder(marker_l)
 
@@ -43,7 +43,7 @@ class Parser(object):
         return True
 
     def parses(self, files : List[Tuple[str, str]]) -> bool:
-        import zuspec_fe_pss.core as zspp
+        import zuspec.fe.pss.core as zspp
         marker_l = self.parser_f.mkMarkerCollector()
         builder = self.parser_f.mkAstBuilder(marker_l)
 
@@ -67,7 +67,7 @@ class Parser(object):
         return True
     
     def link(self) -> 'zsp_ast.RootSymbolScope':
-        import zuspec_fe_pss.core as zspp
+        import zuspec.fe.pss.core as zspp
         linker = self.parser_f.mkAstLinker()
         marker_l = self.parser_f.mkMarkerCollector()
 
@@ -84,7 +84,7 @@ class Parser(object):
 
 
     def _mkErrorMessage(self, marker_l) -> str:
-        import zuspec_fe_pss.core as zspp
+        import zuspec.fe.pss.core as zspp
         prefix = {
             zspp.MarkerSeverityE.Error : "Error: ",
             zspp.MarkerSeverityE.Warn : "Warning: ",

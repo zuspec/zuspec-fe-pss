@@ -5,7 +5,7 @@ Created on Mar 24, 2021
 '''
 from unittest.case import TestCase
 from _io import StringIO
-import zuspec_fe_pss.ast as zsp_ast
+import zuspec.fe.pss.ast as zsp_ast
 
 class TestLoad(TestCase):
 
@@ -13,8 +13,8 @@ class TestLoad(TestCase):
         f = zsp_ast.Factory()
     
     def test_smoke(self):
-        from zuspec_fe_pss import core as zspp_core
-        from zuspec_fe_pss import ast as zspp_ast
+        from zuspec.fe.pss import core as zspp_core
+        from zuspec.fe.pss import ast as zspp_ast
 
         factory = zspp_core.Factory.inst()
         

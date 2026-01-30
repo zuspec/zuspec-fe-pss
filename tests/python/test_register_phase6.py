@@ -13,8 +13,8 @@ converting test cases from TestRegModel.cpp and TestTemplateTypes.cpp to verify:
 """
 
 import pytest
-from zuspec_fe_pss import Parser
-from zuspec_fe_pss.ast_to_ir import AstToIrTranslator
+from zuspec.fe.pss import Parser
+from zuspec.fe.pss.ast_to_ir import AstToIrTranslator
 from zuspec.dataclasses import ir
 
 

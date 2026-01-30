@@ -21,7 +21,7 @@
 #****************************************************************************
 import dataclasses as dc
 from .symbol_scope_util import SymbolScopeUtil
-import zuspec_fe_pss.core as zspp
+import zuspec.fe.pss.core as zspp
 
 @dc.dataclass
 class SymbolTypeScopeUtil(SymbolScopeUtil):

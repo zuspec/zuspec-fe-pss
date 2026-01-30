@@ -13,7 +13,7 @@ from libc.stdint cimport uint64_t
 from libc.stdint cimport int64_t
 from libcpp cimport bool
 cimport cpython.ref as cpy_ref
-from zsp_parser cimport ast_decl as ast
+from zuspec.fe.pss cimport ast_decl as ast
 from ciostream.core cimport istream
 
 ctypedef IFactory *IFactoryP

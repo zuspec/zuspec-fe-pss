@@ -3,13 +3,21 @@ import ctypes
 from enum import IntEnum
 import os
 cimport debug_mgr.core as dm_core
-cimport zuspec_fe_pss.ast as ast
-cimport zuspec_fe_pss.ast_decl as ast_decl
-cimport zuspec_fe_pss.decl as decl
+cimport debug_mgr.decl as dm_decl
+cimport zuspec.fe.pss.ast as ast
+cimport zuspec.fe.pss.ast_decl as ast_decl
+cimport zuspec.fe.pss.decl as decl
 from ciostream.core cimport cistream
 from libc.stdint cimport intptr_t
 from libcpp.vector cimport vector as std_vector
 from libcpp.cast cimport dynamic_cast
+
+# Import the C++ resolveSymbolPathRef function
+cdef extern from "PyParserUtils.h" namespace "zsp::parser":
+    ast_decl.IScopeChild *c_resolveSymbolPathRef "zsp::parser::PyParserUtils::resolveSymbolPathRef" (
+        dm_decl.IDebugMgr              *dmgr,
+        ast_decl.ISymbolChildrenScope    *root,
+        const ast_decl.ISymbolRefPath    *ref)
 
 cdef Factory _inst = None
 cdef class Factory(object):
@@ -195,10 +203,6 @@ cdef class LookupLocationResult(object):
 
 cdef class Marker(object):
 
-    def __dealloc__(self):
-        if self._owned:
-            del self._hndl
-    
     cpdef str msg(self):
         return self._hndl.msg().decode()
 
@@ -207,8 +211,8 @@ cdef class Marker(object):
         return MarkerSeverityE(severity_i)
 
     cpdef Location loc(self):
-        cdef const ast_decl.Location *lp = &self._hndl.loc()
-        return Location(lp.fileid, lp.lineno, lp.linepos)
+        cdef const ast_decl.Location *loc_ref = &(self._hndl.loc())
+        return Location(loc_ref.fileid, loc_ref.lineno, loc_ref.linepos)
 
     @staticmethod
     cdef Marker mk(decl.IMarker *hndl, bool owned=True):
@@ -218,9 +222,6 @@ cdef class Marker(object):
         return ret
 
 cdef class MarkerListener(object):
-    def __dealloc__(self):
-        if self._owned:
-            del self._hndl
 
     cpdef bool hasSeverity(self, s):
         cdef int s_i = int(s)
@@ -246,7 +247,7 @@ cdef class MarkerCollector(MarkerListener):
         return Marker.mk(marker, False)
 
     cdef decl.IMarkerCollector *asCollector(self):
-        return dynamic_cast[decl.IMarkerCollectorP](self._hndl)
+        return <decl.IMarkerCollector *>dynamic_cast[decl.IMarkerCollectorP](self._hndl)
 
     @staticmethod
     cdef MarkerCollector mk(decl.IMarkerCollector *hndl, bool owned=True):
@@ -256,10 +257,6 @@ cdef class MarkerCollector(MarkerListener):
         return ret
 
 cdef class SymbolTableIterator(object):
-
-    def __dealloc__(self):
-        if self._owned:
-            del self._hndl
 
     @staticmethod
     cdef SymbolTableIterator mk(decl.ISymbolTableIterator *hndl, bool owned=True):
@@ -278,7 +275,7 @@ cpdef ast.ScopeChild resolveSymbolPathRef(
     if ref is None:
         raise Exception("Cannot resolve a None ref")
     else:
-        ret = decl.resolveSymbolPathRef(
+        ret = c_resolveSymbolPathRef(
             dmgr._hndl,
             root.asSymbolChildrenScope(),
             ref.asSymbolRefPath())
@@ -287,5 +284,5 @@ cpdef ast.ScopeChild resolveSymbolPathRef(
             return None
         else:
             of = ast.ObjFactory()
-            ret.accept(of._hndl)
+            ret.accept(<ast_decl.VisitorBase *>(of._hndl))
             return of._obj

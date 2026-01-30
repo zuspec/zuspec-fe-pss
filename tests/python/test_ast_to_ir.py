@@ -5,9 +5,9 @@ Test AST to IR translation
 """
 import unittest
 import logging
-from zuspec_fe_pss import Parser
-from zuspec_fe_pss.core import Factory
-from zuspec_fe_pss.ast_to_ir import AstToIrTranslator, AstToIrContext
+from zuspec.fe.pss import Parser
+from zuspec.fe.pss.core import Factory
+from zuspec.fe.pss.ast_to_ir import AstToIrTranslator, AstToIrContext
 from zuspec.dataclasses import ir
 
 # Setup logging for debugging

@@ -5,9 +5,9 @@ Integration tests for PSS statement translation (Phase 2)
 Tests end-to-end PSS code -> AST -> IR translation for statements
 """
 import unittest
-from zuspec_fe_pss import Parser
-from zuspec_fe_pss.core import Factory
-from zuspec_fe_pss.ast_to_ir import AstToIrTranslator
+from zuspec.fe.pss import Parser
+from zuspec.fe.pss.core import Factory
+from zuspec.fe.pss.ast_to_ir import AstToIrTranslator
 from zuspec.dataclasses import ir
 
 

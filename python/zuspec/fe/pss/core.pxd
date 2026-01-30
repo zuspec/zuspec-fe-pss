@@ -1,9 +1,9 @@
 #****************************************************************************
 #* zsp_parser core.pxd
 #****************************************************************************
-cimport zsp_parser.decl as decl
+cimport zuspec.fe.pss.decl as decl
 cimport debug_mgr.core as dm_core
-cimport zsp_parser.ast as ast
+cimport zuspec.fe.pss.ast as ast
 from libc.stdint cimport int32_t
 from libcpp cimport bool
 

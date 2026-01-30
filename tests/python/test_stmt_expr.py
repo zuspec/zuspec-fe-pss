@@ -5,7 +5,7 @@ Test statement and expression translation
 """
 import unittest
 import logging
-from zuspec_fe_pss import Parser, AstToIrTranslator
+from zuspec.fe.pss import Parser, AstToIrTranslator
 from zuspec.dataclasses import ir
 
 logging.basicConfig(level=logging.INFO)

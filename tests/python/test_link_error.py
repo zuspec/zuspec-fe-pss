@@ -15,7 +15,7 @@ class TestLinkError(TestCase):
         }
         """
 
-        from zuspec_fe_pss import core as zspp_core
+        from zuspec.fe.pss import core as zspp_core
 
         factory = zspp_core.Factory.inst()
         

@@ -6,8 +6,8 @@ Unit tests for Register IR Phase 2 Implementation
 Tests the AST to IR translation for registers and template parameters.
 """
 import pytest
-from zuspec_fe_pss import Parser
-from zuspec_fe_pss.ast_to_ir import AstToIrTranslator
+from zuspec.fe.pss import Parser
+from zuspec.fe.pss.ast_to_ir import AstToIrTranslator
 from zuspec.dataclasses import ir
 
 

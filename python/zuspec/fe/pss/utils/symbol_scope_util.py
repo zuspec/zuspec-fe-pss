@@ -20,7 +20,7 @@
 #*
 #****************************************************************************
 import dataclasses as dc
-import zuspec_fe_pss.ast as zsp_ast
+import zuspec.fe.pss.ast as zsp_ast
 from .symbol_children_scope_util import SymbolChildrenScopeUtil
 
 @dc.dataclass
