@@ -14,6 +14,12 @@
 #include "zsp/ast/IGlobalScope.h"
 #include "zsp/parser/IMarkerListener.h"
 
+namespace antlr4 {
+namespace atn {
+    class ParseInfo;
+}
+}
+
 namespace zsp {
 namespace parser {
 
@@ -45,6 +51,10 @@ public:
     virtual void setEnableProfile(bool e) override;
 
     virtual bool getEnableProfile() override;
+
+    virtual bool hasProfileInfo() const;
+
+    virtual IParseProfileInfo *getProfileInfo();
 
 private:
 	AstBuilderIntUP				m_builder_int;

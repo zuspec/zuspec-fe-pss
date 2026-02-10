@@ -1,3 +1,4 @@
+# cython: language_level=3
 
 import ctypes
 from enum import IntEnum
@@ -111,7 +112,8 @@ cdef class Factory(object):
 cdef class AstBuilder(object):
 
     def __dealloc__(self):
-        del self._hndl
+        if self._owned:
+            del self._hndl
 
     cpdef build(self,
         ast.GlobalScope         root,
@@ -130,10 +132,24 @@ cdef class AstBuilder(object):
     cpdef bool getCollectDocStrings(self):
         return self._hndl.getCollectDocStrings()
 
+    cpdef void setEnableProfile(self, bool enable):
+        self._hndl.setEnableProfile(enable)
+
+    cpdef bool getEnableProfile(self):
+        return self._hndl.getEnableProfile()
+
+    cpdef ParseProfileInfo getProfileInfo(self):
+        cdef decl.IParseProfileInfo *profile_info
+        profile_info = self._hndl.getProfileInfo()
+        if profile_info != NULL:
+            return ParseProfileInfo.mk(profile_info, True)
+        return None
+
     @staticmethod
-    cdef AstBuilder mk(decl.IAstBuilder *hndl):
+    cdef AstBuilder mk(decl.IAstBuilder *hndl, bool owned=False):
         ret = AstBuilder()
         ret._hndl = hndl
+        ret._owned = owned
         return ret
 
 cdef class Linker(object):
@@ -286,3 +302,121 @@ cpdef ast.ScopeChild resolveSymbolPathRef(
             of = ast.ObjFactory()
             ret.accept(<ast_decl.VisitorBase *>(of._hndl))
             return of._obj
+
+cdef class DecisionProfileInfo(object):
+
+    def __dealloc__(self):
+        if self._owned:
+            del self._hndl
+
+    @property
+    def decision(self):
+        return self._hndl.getDecision()
+
+    @property
+    def invocations(self):
+        return self._hndl.getInvocations()
+
+    @property
+    def time_in_prediction(self):
+        return self._hndl.getTimeInPrediction()
+
+    @property
+    def sll_lookahead_ops(self):
+        return self._hndl.getSLLLookaheadOps()
+
+    @property
+    def ll_lookahead_ops(self):
+        return self._hndl.getLLLookaheadOps()
+
+    @property
+    def sll_atn_transitions(self):
+        return self._hndl.getSLLATNTransitions()
+
+    @property
+    def ll_atn_transitions(self):
+        return self._hndl.getLLATNTransitions()
+
+    @property
+    def ll_fallback(self):
+        return self._hndl.getLLFallback()
+
+    @property
+    def ambiguity_count(self):
+        return self._hndl.getAmbiguityCount()
+
+    @property
+    def context_sensitivity_count(self):
+        return self._hndl.getContextSensitivityCount()
+
+    @property
+    def error_count(self):
+        return self._hndl.getErrorCount()
+
+    @property
+    def max_lookahead(self):
+        return self._hndl.getMaxLookahead()
+
+    @staticmethod
+    cdef DecisionProfileInfo mk(decl.IDecisionProfileInfo *hndl, bool owned=True):
+        ret = DecisionProfileInfo()
+        ret._hndl = hndl
+        ret._owned = owned
+        return ret
+
+cdef class ParseProfileInfo(object):
+
+    def __dealloc__(self):
+        if self._owned:
+            del self._hndl
+
+    def get_decision_info(self):
+        cdef std_vector[decl.IDecisionProfileInfo*] decisions
+        cdef size_t i
+        decisions = self._hndl.getDecisionInfo()
+        
+        result = []
+        for i in range(decisions.size()):
+            # owned=False because ParseProfileInfo owns these pointers
+            result.append(DecisionProfileInfo.mk(decisions[i], False))
+        
+        return result
+
+    def get_ll_decisions(self):
+        return self._hndl.getLLDecisions()
+
+    @property
+    def total_time_in_prediction(self):
+        return self._hndl.getTotalTimeInPrediction()
+
+    @property
+    def total_sll_lookahead_ops(self):
+        return self._hndl.getTotalSLLLookaheadOps()
+
+    @property
+    def total_ll_lookahead_ops(self):
+        return self._hndl.getTotalLLLookaheadOps()
+
+    @property
+    def total_sll_atn_lookahead_ops(self):
+        return self._hndl.getTotalSLLATNLookaheadOps()
+
+    @property
+    def total_ll_atn_lookahead_ops(self):
+        return self._hndl.getTotalLLATNLookaheadOps()
+
+    @property
+    def total_atn_lookahead_ops(self):
+        return self._hndl.getTotalATNLookaheadOps()
+
+    @property
+    def dfa_size(self):
+        return self._hndl.getDFASize()
+
+    @staticmethod
+    cdef ParseProfileInfo mk(decl.IParseProfileInfo *hndl, bool owned=True):
+        ret = ParseProfileInfo()
+        ret._hndl = hndl
+        ret._owned = owned
+        return ret
+

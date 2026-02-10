@@ -85,6 +85,9 @@ void AstBuilderInt::build(
 
     m_file_id = global->getFileid();
 
+    // Clear any previous profiling data
+    m_profile_decisions.clear();
+
     uint64_t parse_s = time_ms();
 	ANTLRInputStream input(*in);
 	PSSLexer lexer(&input);
@@ -111,14 +114,14 @@ void AstBuilderInt::build(
 	}
 
     if (m_enableProfile) {
-        // Collect and save the resulting data
+        // Extract and store the profiling data immediately while parser is still alive
         atn::ParseInfo info = parser.getParseInfo();
-        const atn::ATN &atn_i = parser.getATN();
-
-        std::vector<atn::DecisionInfo> decision_info = info.getDecisionInfo();
+        m_profile_decisions = info.getDecisionInfo();
+        
+        // Log summary for debugging
         for (std::vector<atn::DecisionInfo>::const_iterator
-            it=decision_info.begin();
-            it!=decision_info.end(); it++) {
+            it=m_profile_decisions.begin();
+            it!=m_profile_decisions.end(); it++) {
             if (it->ambiguities.size()) {
                 DEBUG("Info: %s", it->toString().c_str());
             }

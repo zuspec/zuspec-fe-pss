@@ -12,6 +12,7 @@
 #include "zsp/parser/IMarkerListener.h"
 #include "PSSParserBaseVisitor.h"
 #include "BaseErrorListener.h"
+#include "atn/ParseInfo.h"
 #include "zsp/ast/IExprId.h"
 #include "zsp/ast/IFactory.h"
 #include "zsp/ast/IGlobalScope.h"
@@ -61,6 +62,14 @@ public:
 
     virtual bool getEnableProfile() {
         return m_enableProfile;
+    }
+
+    virtual bool hasProfileInfo() const {
+        return !m_profile_decisions.empty();
+    }
+
+    virtual const std::vector<atn::DecisionInfo> *getProfileInfo() const {
+        return m_profile_decisions.empty() ? nullptr : &m_profile_decisions;
     }
 
 	// B.1 package declaration
@@ -392,6 +401,7 @@ private:
     int32_t                                     m_file_id;
 	bool										m_collectDocStrings;
     bool                                        m_enableProfile;
+    std::vector<atn::DecisionInfo>              m_profile_decisions;
     IMarkerListener								*m_marker_l;
 	ast::IFactory								*m_factory;
 	ast::IExpr									*m_expr;

@@ -41,6 +41,7 @@ cdef Factory _factoryInst = None
 
 cdef class AstBuilder(object):
     cdef decl.IAstBuilder      *_hndl
+    cdef bool                  _owned
 
     cpdef build(self,
         ast.GlobalScope         root,
@@ -50,8 +51,14 @@ cdef class AstBuilder(object):
 
     cpdef bool getCollectDocStrings(self)
 
+    cpdef void setEnableProfile(self, bool enable)
+
+    cpdef bool getEnableProfile(self)
+
+    cpdef ParseProfileInfo getProfileInfo(self)
+
     @staticmethod
-    cdef AstBuilder mk(decl.IAstBuilder *hndl)
+    cdef AstBuilder mk(decl.IAstBuilder *hndl, bool owned=*)
 
 cdef class Linker(object):
     cdef decl.ILinker           *_hndl
@@ -114,4 +121,18 @@ cdef class SymbolTableIterator(object):
 
     @staticmethod
     cdef SymbolTableIterator mk(decl.ISymbolTableIterator *hndl, bool owned=*)
+
+cdef class DecisionProfileInfo(object):
+    cdef decl.IDecisionProfileInfo  *_hndl
+    cdef bool                       _owned
+
+    @staticmethod
+    cdef DecisionProfileInfo mk(decl.IDecisionProfileInfo *hndl, bool owned=*)
+
+cdef class ParseProfileInfo(object):
+    cdef decl.IParseProfileInfo     *_hndl
+    cdef bool                       _owned
+
+    @staticmethod
+    cdef ParseProfileInfo mk(decl.IParseProfileInfo *hndl, bool owned=*)
 

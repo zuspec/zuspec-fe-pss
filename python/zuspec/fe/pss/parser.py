@@ -14,12 +14,18 @@ class Parser(object):
         self._root = None
         self._filenames : Dict[int,str] = {}
         self._files : List[zsp_ast.GlobalScope] = []
+        self._enable_profiling = False
+        self._last_builder = None
         pass
 
     def parse(self, files : List[str]) -> bool:
         import zuspec.fe.pss.core as zspp
         marker_l = self.parser_f.mkMarkerCollector()
         builder = self.parser_f.mkAstBuilder(marker_l)
+        
+        # Enable profiling if requested
+        if self._enable_profiling:
+            builder.setEnableProfile(True)
 
         file_id = 0
         if len(self._files) == 0:
@@ -40,12 +46,19 @@ class Parser(object):
 
             self._files.append(ast)
 
+        # Store builder to access profiling info
+        self._last_builder = builder
+
         return True
 
     def parses(self, files : List[Tuple[str, str]]) -> bool:
         import zuspec.fe.pss.core as zspp
         marker_l = self.parser_f.mkMarkerCollector()
         builder = self.parser_f.mkAstBuilder(marker_l)
+        
+        # Enable profiling if requested
+        if self._enable_profiling:
+            builder.setEnableProfile(True)
 
         if len(self._files) == 0:
             stdlib = self.ast_f.mkGlobalScope(len(self._files))
@@ -64,7 +77,26 @@ class Parser(object):
 
             self._files.append(ast)
 
+        # Store builder to access profiling info
+        self._last_builder = builder
+
         return True
+    
+    def enable_profiling(self, enable: bool = True):
+        """Enable or disable ANTLR profiling for subsequent parse operations."""
+        # Profiling must be enabled before creating builder
+        # This is a placeholder - will take effect on next parse
+        self._enable_profiling = enable
+
+    def get_profile_info(self):
+        """Get profiling information from the last parse operation.
+        
+        Returns ParseProfileInfo object with decision-level and aggregate metrics,
+        or None if profiling was not enabled or no parse has been performed.
+        """
+        if hasattr(self, '_last_builder') and self._last_builder is not None:
+            return self._last_builder.getProfileInfo()
+        return None
     
     def link(self) -> 'zsp_ast.RootSymbolScope':
         import zuspec.fe.pss.core as zspp

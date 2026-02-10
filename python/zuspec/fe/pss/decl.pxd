@@ -51,6 +51,32 @@ cdef extern from "zsp/parser/IFactory.h" namespace "zsp::parser":
 
         IMarkerCollector *mkMarkerCollector()
 
+cdef extern from "zsp/parser/IParseProfileInfo.h" namespace "zsp::parser":
+    cdef cppclass IDecisionProfileInfo:
+        size_t getDecision()
+        int64_t getInvocations()
+        int64_t getTimeInPrediction()
+        int64_t getSLLLookaheadOps()
+        int64_t getLLLookaheadOps()
+        int64_t getSLLATNTransitions()
+        int64_t getLLATNTransitions()
+        int64_t getLLFallback()
+        size_t getAmbiguityCount()
+        size_t getContextSensitivityCount()
+        size_t getErrorCount()
+        size_t getMaxLookahead()
+
+    cdef cppclass IParseProfileInfo:
+        cpp_vector[IDecisionProfileInfo*] getDecisionInfo()
+        cpp_vector[size_t] getLLDecisions()
+        int64_t getTotalTimeInPrediction()
+        int64_t getTotalSLLLookaheadOps()
+        int64_t getTotalLLLookaheadOps()
+        int64_t getTotalSLLATNLookaheadOps()
+        int64_t getTotalLLATNLookaheadOps()
+        int64_t getTotalATNLookaheadOps()
+        size_t getDFASize()
+
 
 cdef extern from "zsp/parser/IAstBuilder.h" namespace "zsp::parser":
     cdef cppclass IAstBuilder:
@@ -62,6 +88,12 @@ cdef extern from "zsp/parser/IAstBuilder.h" namespace "zsp::parser":
         void setCollectDocStrings(bool)
 
         bool getCollectDocStrings()
+
+        void setEnableProfile(bool)
+
+        bool getEnableProfile()
+
+        IParseProfileInfo *getProfileInfo()
 
 cdef extern from "zsp/parser/ILinker.h" namespace "zsp::parser":
     cdef cppclass ILinker:
