@@ -1,6 +1,7 @@
 
 import os
 from .parser import Parser
+from .ast_to_ir import AstToIrTranslator, AstToIrContext
 
 def get_deps():
     return []

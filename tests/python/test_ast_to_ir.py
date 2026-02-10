@@ -1,6 +1,4 @@
 """
-import pytest
-pytestmark = pytest.mark.skip(reason="ast_to_ir.py missing - needs to be recreated")
 Test AST to IR translation
 """
 import unittest
