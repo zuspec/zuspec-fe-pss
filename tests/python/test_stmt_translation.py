@@ -1,6 +1,6 @@
 """
 import pytest
-pytestmark = pytest.mark.skip(reason="ast_to_ir.py missing - needs to be recreated")
+#pytestmark = pytest.mark.skip(reason="ast_to_ir.py missing - needs to be recreated")
 Integration tests for PSS statement translation (Phase 2)
 Tests end-to-end PSS code -> AST -> IR translation for statements
 """

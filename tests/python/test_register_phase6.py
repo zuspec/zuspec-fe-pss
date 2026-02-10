@@ -1,6 +1,6 @@
 """
 import pytest
-pytestmark = pytest.mark.skip(reason="ast_to_ir.py missing - needs to be recreated")
+#pytestmark = pytest.mark.skip(reason="ast_to_ir.py missing - needs to be recreated")
 Phase 6: Integration Testing for Register IR
 
 This module provides comprehensive integration tests for the register IR implementation,

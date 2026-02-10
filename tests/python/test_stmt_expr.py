@@ -1,6 +1,6 @@
 """
 import pytest
-pytestmark = pytest.mark.skip(reason="ast_to_ir.py missing - needs to be recreated")
+#pytestmark = pytest.mark.skip(reason="ast_to_ir.py missing - needs to be recreated")
 Test statement and expression translation
 """
 import unittest

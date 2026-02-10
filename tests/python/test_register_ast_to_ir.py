@@ -1,6 +1,6 @@
 """
 import pytest
-pytestmark = pytest.mark.skip(reason="ast_to_ir.py missing - needs to be recreated")
+#pytestmark = pytest.mark.skip(reason="ast_to_ir.py missing - needs to be recreated")
 Unit tests for Register IR Phase 2 Implementation
 
 Tests the AST to IR translation for registers and template parameters.

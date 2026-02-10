@@ -1,6 +1,6 @@
 """
 import pytest
-pytestmark = pytest.mark.skip(reason="ast_to_ir.py missing - needs to be recreated")
+#pytestmark = pytest.mark.skip(reason="ast_to_ir.py missing - needs to be recreated")
 Unit tests for Register IR Phase 5 Implementation
 
 Tests field extraction from struct-based registers and offset computation.
