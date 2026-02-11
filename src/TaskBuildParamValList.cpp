@@ -50,6 +50,7 @@ ast::ITemplateParamDeclList *TaskBuildParamValList::build(
     m_pval_type = 0;
     m_pval_type_valref_expr = 0;
     m_pval_expr = 0;
+    m_visited.clear();  // Clear visited set for each build
 
     if (pvals->getValues().size() > plist->getChildren().size()) {
         fprintf(stdout, "TODO: Flag error \"Type accepts %d parameters ; %d supplied\"\n",
@@ -245,13 +246,19 @@ void TaskBuildParamValList::visitDataTypeUserDefined(ast::IDataTypeUserDefined *
         ast::IScopeChild *target = TaskResolveSymbolPathRef(
             m_ctxt->getDebugMgr(),
             m_ctxt->root()).resolve(i->getType_id()->getTarget());
-        m_pval_type_isval = false;
-        if (target) {
+        
+        // Check if we've already visited this target to prevent infinite recursion
+        if (target && m_visited.find(target) == m_visited.end()) {
+            m_visited.insert(target);
+            m_pval_type_isval = false;
             target->accept(m_this);
-        }
-        if (m_pval_type_isval || m_ptype_value) {
-            // Save the reference
-            m_pval_type_valref_expr = i->getType_id();
+            
+            if (m_pval_type_isval || m_ptype_value) {
+                // Save the reference
+                m_pval_type_valref_expr = i->getType_id();
+            }
+        } else if (target) {
+            DEBUG("Skipping already-visited target to prevent infinite recursion");
         }
     }
     DEBUG_LEAVE("visitDataTypeUserDefined");
