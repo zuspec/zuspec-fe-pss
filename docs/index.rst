@@ -45,6 +45,8 @@ Key Features
 
    pss30_architecture
    ast_structure
+   ast_usage_guide
+   ast_class_hierarchy
 
 .. toctree::
    :maxdepth: 2
