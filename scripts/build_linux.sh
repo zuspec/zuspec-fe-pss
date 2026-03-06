@@ -34,6 +34,7 @@ echo "=== END PRE-BUILD CHECK ==="
 
 PYTHON=./packages/python/bin/python
 ${PYTHON} -m pip install twine auditwheel ninja wheel cython
+${PYTHON} -m pip install debug-mgr
 
 echo "IVPM version: (1)"
 ${PYTHON} -m pip show ivpm
