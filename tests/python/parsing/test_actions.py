@@ -414,8 +414,7 @@ def test_action_with_action_handle_fields(parser):
 
 
 def test_action_with_action_handle_array(parser):
-    """Test action with action handle array - NOTE: May cause segfault"""
-    pytest.skip("Action handle arrays cause segfault in linker")
+    """Test action with action handle array"""
     code = """
         component pss_top {
             action Inner { }
@@ -591,7 +590,7 @@ def test_action_with_compile_assert(parser):
 # Complex Action Scenarios
 # =============================================================================
 
-@pytest.mark.skip(reason="Causes segfault - complex nested references")
+
 def test_action_comprehensive(parser):
     """Test action with multiple features combined"""
     code = """

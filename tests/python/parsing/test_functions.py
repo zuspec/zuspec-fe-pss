@@ -20,7 +20,8 @@ def test_function_void_no_params(parser):
     code = """
     function void my_func();
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    assert root is not None
 
 
 def test_function_int_return(parser):
@@ -129,7 +130,12 @@ def test_function_in_component(parser):
         }
     }
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    comp = get_symbol(root, "my_c")
+    assert comp is not None
+    assert has_symbol(comp, "test_a")
+    loc = get_location(comp.getTarget())
+    assert loc is not None
 
 
 def test_function_call_in_exec_block(parser):
@@ -303,3 +309,4 @@ def test_function_complex_example(parser):
     }
     """
     assert_parse_ok(code, parser)
+from ..test_helpers import get_symbol, has_symbol, get_location

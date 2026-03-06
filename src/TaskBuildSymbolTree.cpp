@@ -23,6 +23,7 @@
 #include "zsp/parser/impl/TaskGetName.h"
 #include "BuiltinsFactory.h"
 #include "TaskBuildSymbolTree.h"
+#include "Marker.h"
 
 namespace zsp {
 namespace parser {
@@ -232,6 +233,12 @@ void TaskBuildSymbolTree::visitEnumDecl(ast::IEnumDecl *i) {
         popSymbolScope();
     }
     DEBUG_LEAVE("visitEnumDecl %s", i->getName()->getId().c_str());
+}
+
+void TaskBuildSymbolTree::visitTypedefDeclaration(ast::ITypedefDeclaration *i) {
+    DEBUG_ENTER("visitTypedefDeclaration %s", i->getName()->getId().c_str());
+    addChild(i, i->getName()->getId(), false);
+    DEBUG_LEAVE("visitTypedefDeclaration %s", i->getName()->getId().c_str());
 }
 
 void TaskBuildSymbolTree::visitEnumItem(ast::IEnumItem *i) {
@@ -695,8 +702,11 @@ void TaskBuildSymbolTree::visitTypeScope(ast::ITypeScope *i) {
                 plist->getChildren().push_back(ast::IScopeChildUP(it->get(), false));
                 plist->getSymtab().insert({(*it)->getName()->getId(), id});
             } else {
-                // TODO: Find a proper way to report
-                fprintf(stdout, "Error: duplicate parameter name\n");
+                Marker m(
+                    "duplicate parameter name '" + (*it)->getName()->getId() + "'",
+                    MarkerSeverityE::Error,
+                    (*it)->getLocation());
+                m_marker_l->marker(&m);
             }
         }
     } else {
@@ -733,8 +743,17 @@ void TaskBuildSymbolTree::reportDuplicateSymbol(
         ast::ISymbolScope       *scope,
         ast::IScopeChild        *orig,
         ast::IScopeChild        *dup) {
-    DEBUG_ERROR("Duplicate declaration: %s", TaskGetName().get(orig).c_str());
-    fprintf(stdout, "Error: duplicate declaration");
+    std::string name = TaskGetName().get(orig);
+    DEBUG_ERROR("Duplicate declaration: %s", name.c_str());
+    ast::Location loc = dup->getLocation();
+    if (loc.lineno < 0 && orig) {
+        loc = orig->getLocation();
+    }
+    Marker m(
+        "duplicate declaration of '" + name + "'",
+        MarkerSeverityE::Warn,
+        loc);
+    m_marker_l->marker(&m);
 }
 
 ast::IScopeChild *TaskBuildSymbolTree::findSymbol(const std::string &name) {

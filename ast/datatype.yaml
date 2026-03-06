@@ -243,3 +243,9 @@ classes:
       #            - target:
       #  - is_ctor: false
       #  - type: SP<RefExpr>
+
+- TypedefDeclaration:
+    super: ScopeChild
+    data:
+    - name: UP<ExprId>
+    - type: UP<DataType>

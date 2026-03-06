@@ -120,7 +120,7 @@ def get_location(node) -> Optional[Tuple[int, int]]:
     
     if hasattr(node, 'getLocation'):
         loc = node.getLocation()
-        return (loc.line, loc.column)
+        return (loc.lineno, loc.linepos)
     return None
 
 
@@ -146,13 +146,13 @@ def assert_location(node, line: int, col: int):
 # Assertion Helpers
 # =============================================================================
 
-def assert_parse_ok(code: str, filename: str = "test.pss") -> Any:
+def assert_parse_ok(code: str, parser_or_filename=None) -> Any:
     """
     Assert code parses without errors
     
     Args:
         code: PSS source code
-        filename: Filename for error reporting
+        parser_or_filename: Optional Parser instance or filename string
         
     Returns:
         Linked symbol scope root
@@ -160,7 +160,12 @@ def assert_parse_ok(code: str, filename: str = "test.pss") -> Any:
     Raises:
         AssertionError if parsing fails
     """
-    root = parse_pss(code, filename)
+    if isinstance(parser_or_filename, Parser):
+        root = parse_pss(code, parser=parser_or_filename)
+    elif isinstance(parser_or_filename, str):
+        root = parse_pss(code, filename=parser_or_filename)
+    else:
+        root = parse_pss(code)
     assert root is not None, "Parse failed - returned None"
     return root
 

@@ -1773,6 +1773,30 @@ antlrcpp::Any AstBuilderInt::visitEnum_declaration(PSSParser::Enum_declarationCo
 	return 0;
 }
 
+antlrcpp::Any AstBuilderInt::visitTypedef_declaration(PSSParser::Typedef_declarationContext *ctx) {
+	DEBUG_ENTER("visitTypedef_declaration");
+
+	ast::IDataType *type = 0;
+	if (ctx->data_type()) {
+		type = mkDataType(ctx->data_type());
+	}
+
+	ast::IExprId *name = 0;
+	if (ctx->type_identifier() &&
+		!ctx->type_identifier()->type_identifier_elem().empty()) {
+		name = mkId(
+			ctx->type_identifier()->type_identifier_elem(0)->identifier());
+	}
+
+	if (name) {
+		ast::ITypedefDeclaration *decl = m_factory->mkTypedefDeclaration(name, type);
+		addChild(decl, ctx->start);
+	}
+
+	DEBUG_LEAVE("visitTypedef_declaration");
+	return 0;
+}
+
 antlrcpp::Any AstBuilderInt::visitReference_type(PSSParser::Reference_typeContext *ctx) {
 	DEBUG_ENTER("visitReference_type");
 
@@ -2463,6 +2487,45 @@ antlrcpp::Any AstBuilderInt::visitStruct_literal(PSSParser::Struct_literalContex
     return 0;
 }
 
+static std::string rewriteSyntaxError(const std::string &msg, const std::string &sym) {
+    if (sym == "<EOF>") {
+        return "unexpected end of input; possible missing closing '}'";
+    }
+    if (msg.find("missing {ID, ESCAPED_ID}") != std::string::npos) {
+        return "expected identifier before '" + sym + "'";
+    }
+    if (msg.find("mismatched input") != std::string::npos) {
+        if (msg.find("expecting {',', ';'}") != std::string::npos ||
+            msg.find("expecting ';'") != std::string::npos) {
+            return "expected ';' before '" + sym + "'";
+        }
+        if (msg.find("expecting {'{', ':', '<'}") != std::string::npos ||
+            msg.find("expecting {'{', ':'}") != std::string::npos) {
+            std::string hint;
+            if (sym == "extends") {
+                hint = "; use ':' for inheritance, not 'extends'";
+            }
+            return "expected '{' or ':' before '" + sym + "'" + hint;
+        }
+        std::string expecting = msg.substr(msg.find("expecting"));
+        if (expecting.size() > 60) {
+            return "unexpected '" + sym + "' in this context";
+        }
+        return "unexpected '" + sym + "' " + expecting;
+    }
+    if (msg.find("extraneous input") != std::string::npos) {
+        if (sym.size() == 1 && !isalpha(sym[0])) {
+            return "unexpected '" + sym + "' in this context";
+        } else {
+            return "unexpected keyword '" + sym + "' in this context";
+        }
+    }
+    if (msg.find("no viable alternative") != std::string::npos) {
+        return "syntax error at '" + sym + "'";
+    }
+    return msg;
+}
+
 void AstBuilderInt::syntaxError(
     		Recognizer *recognizer,
 			Token * offendingSymbol,
@@ -2479,8 +2542,10 @@ void AstBuilderInt::syntaxError(
 		loc.linepos = charPositionInLine;
         loc.extent = offendingSymbol->getText().size();
 
+		std::string rewritten = rewriteSyntaxError(msg, offendingSymbol->getText());
+
 		Marker m(
-				msg,
+				rewritten,
 				MarkerSeverityE::Error,
 				loc);
 		m_marker_l->marker(&m);

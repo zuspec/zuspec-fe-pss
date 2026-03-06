@@ -53,9 +53,14 @@ ast::ITemplateParamDeclList *TaskBuildParamValList::build(
     m_visited.clear();  // Clear visited set for each build
 
     if (pvals->getValues().size() > plist->getChildren().size()) {
-        fprintf(stdout, "TODO: Flag error \"Type accepts %d parameters ; %d supplied\"\n",
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+            "type accepts %d template parameter(s) but %d supplied",
             (int)plist->getChildren().size(),
             (int)pvals->getValues().size());
+        m_ctxt->addErrorMarker(
+            plist->getChildren().at(0)->getLocation(),
+            "%s", buf);
         return 0;
     }
 

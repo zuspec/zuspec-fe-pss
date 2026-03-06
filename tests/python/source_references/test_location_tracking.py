@@ -28,9 +28,8 @@ def test_location_component_on_first_line(parser):
     
     # Should have location information
     loc = get_location(comp)
-    if loc:  # API may not expose location
-        assert loc[0] == 1  # Line 1
-        assert loc[1] >= 0  # Column 0 or greater
+    assert loc is not None, "getLocation() should return location data"
+    assert loc[0] == 1, f"Expected line 1, got {loc[0]}"
 
 
 def test_location_action_declaration(parser):
@@ -48,10 +47,10 @@ component pss_top {
     
     # Action should be on line 3
     action = get_symbol(comp, "test_a")
-    if action:
-        loc = get_location(action)
-        # Location tracking may not be fully exposed
-        # Just verify we can get the action
+    assert action is not None
+    loc = get_location(action)
+    assert loc is not None
+    assert loc[0] == 3, f"Expected action on line 3, got {loc[0]}"
 
 
 def test_location_struct_declaration(parser):

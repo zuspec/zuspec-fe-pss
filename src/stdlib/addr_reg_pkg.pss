@@ -5,6 +5,10 @@ package addr_reg_pkg {
 
     component addr_space_base_c {};
 
+    component addr_space_group_c {
+        function void add_addr_space(ref addr_space_base_c address_space);
+    };
+
     struct addr_trait_s {};
 
     struct empty_addr_trait_s : addr_trait_s {};

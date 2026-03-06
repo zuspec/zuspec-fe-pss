@@ -19,15 +19,20 @@ from ..test_helpers import parse_pss, assert_parse_ok, assert_parse_error
 def test_coverage_inline_covergroup(parser):
     """Test inline covergroup in struct"""
     code = """
-    struct test_s {
-        rand bit[4] value;
-        
-        covergroup {
-            coverpoint value;
-        } cg_inst;
-    };
+struct test_s {
+    rand bit[4] value;
+    covergroup {
+        coverpoint value;
+    } cg_inst;
+};
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    sym = get_symbol(root, "test_s")
+    assert sym is not None
+    assert has_symbol(sym, "value")
+    loc = get_location(sym.getTarget())
+    assert loc is not None
+    assert loc[0] == 2
 
 
 def test_coverage_explicit_covergroup(parser):
@@ -449,3 +454,4 @@ def test_coverage_with_constraint(parser):
     };
     """
     assert_parse_ok(code, parser)
+from ..test_helpers import get_symbol, has_symbol, get_location

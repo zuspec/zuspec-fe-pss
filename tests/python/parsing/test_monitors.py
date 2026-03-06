@@ -19,15 +19,20 @@ from test_helpers import assert_parse_ok
 # ============================================================================
 
 def test_monitor_empty():
-    """Test empty monitor declaration."""
+    """Test empty monitor declaration — verify linkage."""
     pss = """
-    component MyComponent {
-        monitor EmptyMonitor {
-        }
+component MyComponent {
+    monitor EmptyMonitor {
     }
+}
     """
-    ast = assert_parse_ok(pss)
-    assert ast is not None
+    root = parse_pss(pss)
+    comp = get_symbol(root, "MyComponent")
+    assert comp is not None
+    assert has_symbol(comp, "EmptyMonitor")
+    loc = get_location(comp.getTarget())
+    assert loc is not None
+    assert loc[0] == 2
 
 
 def test_monitor_with_action_handle():
@@ -374,3 +379,4 @@ def test_scalability_nested_monitors(nesting_depth):
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+from test_helpers import parse_pss, get_symbol, has_symbol, get_location

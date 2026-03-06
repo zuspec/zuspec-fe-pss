@@ -23,22 +23,23 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
-from test_helpers import assert_parse_ok
+from test_helpers import assert_parse_ok, parse_pss, get_symbol, has_symbol, get_location
 
 
 def test_executor_base_definitions():
     """Test basic executor type definitions."""
     pss = """
-    package executor_pkg {
-        struct executor_trait_s { }
-        
-        struct empty_executor_trait_s : executor_trait_s { }
-        
-        component executor_base_c { }
-    }
+package executor_pkg {
+    struct executor_trait_s { }
+    struct empty_executor_trait_s : executor_trait_s { }
+    component executor_base_c { }
+}
     """
-    ast = assert_parse_ok(pss)
-    assert ast is not None
+    root = parse_pss(pss)
+    pkg = get_symbol(root, "executor_pkg")
+    assert pkg is not None
+    assert has_symbol(pkg, "executor_trait_s")
+    assert has_symbol(pkg, "executor_base_c")
 
 
 def test_executor_component_template():

@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
-from test_helpers import assert_parse_ok
+from test_helpers import assert_parse_ok, parse_pss, get_symbol, has_symbol, get_location
 
 
 # ============================================================================
@@ -29,12 +29,12 @@ from test_helpers import assert_parse_ok
 def test_enum_extension_basic():
     """Test basic enum extension."""
     pss = """
-    enum config_modes_e {MODE_A, MODE_B}
-    
-    extend enum config_modes_e {MODE_C, MODE_D}
+enum config_modes_e {MODE_A, MODE_B}
+extend enum config_modes_e {MODE_C, MODE_D}
     """
-    ast = assert_parse_ok(pss)
-    assert ast is not None
+    root = parse_pss(pss)
+    sym = get_symbol(root, "config_modes_e")
+    assert sym is not None
 
 
 def test_enum_extension_with_values():

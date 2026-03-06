@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
-from test_helpers import assert_parse_ok
+from test_helpers import assert_parse_ok, parse_pss, get_symbol, has_symbol, get_location
 
 
 # ============================================================================
@@ -21,24 +21,30 @@ from test_helpers import assert_parse_ok
 def test_sequential_implicit():
     """Test implicit sequential activity block."""
     pss = """
-    component MyComponent {
-        action A { }
-        action B { }
-        action C { }
-        action Top {
-            A a;
-            B b;
-            C c;
-            activity {
-                do a;
-                do b;
-                do c;
-            }
+component MyComponent {
+    action A { }
+    action B { }
+    action C { }
+    action Top {
+        A a;
+        B b;
+        C c;
+        activity {
+            do a;
+            do b;
+            do c;
         }
     }
+}
     """
-    ast = assert_parse_ok(pss)
-    assert ast is not None
+    root = parse_pss(pss)
+    comp = get_symbol(root, "MyComponent")
+    assert comp is not None
+    for name in ("A", "B", "C", "Top"):
+        assert has_symbol(comp, name), f"action {name} not found"
+    loc = get_location(comp.getTarget())
+    assert loc is not None
+    assert loc[0] == 2
 
 
 def test_sequential_explicit():

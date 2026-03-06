@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
-from test_helpers import assert_parse_ok
+from test_helpers import assert_parse_ok, parse_pss, get_symbol, has_symbol, get_location
 
 
 # ============================================================================
@@ -37,8 +37,10 @@ def test_contiguous_addr_space_basic():
         contiguous_addr_space_c<> sys_mem;
     }
     """
-    ast = assert_parse_ok(pss)
-    assert ast is not None
+    root = parse_pss(pss)
+    comp = get_symbol(root, "my_system")
+    assert comp is not None
+    assert has_symbol(comp, "sys_mem")
 
 
 def test_transparent_addr_space_basic():

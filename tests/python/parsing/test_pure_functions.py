@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
-from test_helpers import assert_parse_ok
+from test_helpers import assert_parse_ok, parse_pss, get_symbol, has_symbol, get_location
 
 
 # ============================================================================
@@ -29,14 +29,18 @@ from test_helpers import assert_parse_ok
 def test_pure_function_basic():
     """Test basic pure function declaration."""
     pss = """
-    component MyComponent {
-        pure function int get_value() {
-            return 42;
-        }
+component MyComponent {
+    pure function int get_value() {
+        return 42;
     }
+}
     """
-    ast = assert_parse_ok(pss)
-    assert ast is not None
+    root = parse_pss(pss)
+    comp = get_symbol(root, "MyComponent")
+    assert comp is not None
+    loc = get_location(comp.getTarget())
+    assert loc is not None
+    assert loc[0] == 2
 
 
 def test_pure_function_with_params():

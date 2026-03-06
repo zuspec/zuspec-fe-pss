@@ -340,11 +340,11 @@ def test_component_with_import_functions(parser):
 
 
 def test_component_with_export_functions(parser):
-    """Test component with export functions"""
+    """Test component with export actions (LRM §22.9)"""
     code = """
         component pss_top {
-            export function void api_call();
-            export function int api_process(int data);
+            action DoWork { rand int size; }
+            export DoWork(int size);
         }
     """
     assert_parse_ok(code, parser)
@@ -476,7 +476,6 @@ def test_component_with_override_block(parser):
 # Complex Scenarios
 # =============================================================================
 
-@pytest.mark.skip(reason="Causes segfault - complex nested references")
 def test_component_comprehensive(parser):
     """Test component with many features combined"""
     code = """

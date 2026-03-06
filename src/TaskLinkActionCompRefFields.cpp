@@ -74,13 +74,16 @@ void TaskLinkActionCompRefFields::visitComponent(ast::IComponent *i) {
 
 void TaskLinkActionCompRefFields::visitExtendType(ast::IExtendType *i) {
     DEBUG_ENTER("visitExtendType");
-    ast::IScopeChild *ext_target = m_symtab->resolveAbsPath(
-        i->getTarget()->getTarget());
-    ast::ISymbolScope *target_s = dynamic_cast<ast::ISymbolScope *>(ext_target);
-
-    m_symtab->pushScope(target_s);
-    VisitorBase::visitExtendType(i);
-    m_symtab->popScope();
+    if (i->getTarget() && i->getTarget()->getTarget()) {
+        ast::IScopeChild *ext_target = m_symtab->resolveAbsPath(
+            i->getTarget()->getTarget());
+        ast::ISymbolScope *target_s = dynamic_cast<ast::ISymbolScope *>(ext_target);
+        if (target_s) {
+            m_symtab->pushScope(target_s);
+            VisitorBase::visitExtendType(i);
+            m_symtab->popScope();
+        }
+    }
     DEBUG_LEAVE("visitExtendType");
 }
 
@@ -116,15 +119,19 @@ void TaskLinkActionCompRefFields::visitSymbolScope(ast::ISymbolScope *i) {
 void TaskLinkActionCompRefFields::visitSymbolExtendScope(ast::ISymbolExtendScope *i) {
     DEBUG_ENTER("visitSymbolExtendScope");
     ast::IExtendType *ext = dynamic_cast<ast::IExtendType *>(i->getTarget());
-    ast::IScopeChild *ext_target = m_symtab->resolveAbsPath(ext->getTarget()->getTarget());
-    ast::ISymbolScope *target_s = dynamic_cast<ast::ISymbolScope *>(ext_target);
-    m_symtab->pushScope(target_s);
-    for (std::vector<ast::IScopeChildUP>::const_iterator
-        it=i->getChildren().begin();
-        it!=i->getChildren().end(); it++) {
-        (*it)->accept(m_this);
+    if (ext && ext->getTarget() && ext->getTarget()->getTarget()) {
+        ast::IScopeChild *ext_target = m_symtab->resolveAbsPath(ext->getTarget()->getTarget());
+        ast::ISymbolScope *target_s = dynamic_cast<ast::ISymbolScope *>(ext_target);
+        if (target_s) {
+            m_symtab->pushScope(target_s);
+            for (std::vector<ast::IScopeChildUP>::const_iterator
+                it=i->getChildren().begin();
+                it!=i->getChildren().end(); it++) {
+                (*it)->accept(m_this);
+            }
+            m_symtab->popScope();
+        }
     }
-    m_symtab->popScope();
     DEBUG_LEAVE("visitSymbolExtendScope");
 }
 

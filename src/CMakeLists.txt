@@ -12,7 +12,7 @@ else()
   add_compile_options(-DANTLR4CPP_STATIC)
 endif()
 
-set(CMAKE_INSTALL_RPATH $ORIGIN)
+set(CMAKE_INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib64")
 
 include_directories(
     ${CMAKE_BINARY_DIR}/antlr4/include/antlr4-runtime
@@ -100,4 +100,3 @@ add_custom_command(
 
 # add_dependencies(zsp-parser_static AST libantlr4)
 	
-

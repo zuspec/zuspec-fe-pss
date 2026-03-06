@@ -27,8 +27,12 @@ def test_template_value_param_simple():
         }
     }
     """
-    ast = assert_parse_ok(pss)
-    assert ast is not None
+    root = parse_pss(pss)
+    comp = get_symbol(root, "MyComponent")
+    assert comp is not None
+    assert has_symbol(comp, "MyStruct")
+    loc = get_location(comp.getTarget())
+    assert loc is not None
 
 
 def test_template_value_param_with_default():
@@ -164,4 +168,4 @@ def test_template_mixed_params():
     ast = assert_parse_ok(pss)
     assert ast is not None
 
-
+from test_helpers import parse_pss, get_symbol, has_symbol, get_location

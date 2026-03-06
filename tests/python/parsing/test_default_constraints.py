@@ -6,7 +6,7 @@ import pytest
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from test_helpers import assert_parse_ok, assert_parse_error
+from test_helpers import assert_parse_ok, assert_parse_error, parse_pss, get_symbol, has_symbol, get_location
 
 
 def test_default_basic(parser):
@@ -20,7 +20,12 @@ def test_default_basic(parser):
         }
     }
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    comp = get_symbol(root, "pss_top")
+    assert comp is not None
+    action = get_symbol(comp, "test_a")
+    assert action is not None
+    assert has_symbol(action, "val")
 
 
 def test_default_multiple_fields(parser):

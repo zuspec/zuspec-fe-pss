@@ -23,6 +23,7 @@
 #include "zsp/parser/impl/TaskGetSymbolRefPathKind.h"
 #include "TaskResolveRootRef.h"
 #include "TaskResolveEnumRef.h"
+#include "zsp/parser/impl/TaskResolveSymbolPathRef.h"
 
 
 namespace zsp {
@@ -158,10 +159,16 @@ void TaskResolveRootRef::visitSymbolTypeScope(ast::ISymbolTypeScope *i) {
     }
 
     if (!m_ref) {
-        // Didn't find, so let's look elsewhere...
-        // TODO: template parameters
-        // TODO: 
-
+        ast::ITypeScope *ts = dynamic_cast<ast::ITypeScope *>(i->getTarget());
+        if (ts && ts->getSuper_t() && ts->getSuper_t()->getTarget()) {
+            DEBUG("Searching super-type chain for %s", m_id->getId().c_str());
+            ast::IScopeChild *super_sc = TaskResolveSymbolPathRef(
+                m_ctxt->getDebugMgr(), m_ctxt->root()
+            ).resolve(ts->getSuper_t()->getTarget());
+            if (super_sc) {
+                super_sc->accept(m_this);
+            }
+        }
     }
 
     DEBUG_LEAVE("visitSymbolTypeScope %p", m_ref);

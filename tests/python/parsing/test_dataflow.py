@@ -16,11 +16,17 @@ from test_helpers import assert_parse_ok, assert_parse_error
 def test_buffer_simple(parser):
     """Test simple buffer declaration"""
     code = """
-    buffer data_buff_s {
-        rand int data;
-    };
+buffer data_buff_s {
+    rand int data;
+};
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    sym = get_symbol(root, "data_buff_s")
+    assert sym is not None
+    assert has_symbol(sym, "data")
+    loc = get_location(sym.getTarget())
+    assert loc is not None
+    assert loc[0] == 2
 
 
 def test_buffer_with_fields(parser):
@@ -775,3 +781,4 @@ def test_buffer_array_sizes(parser, array_size):
     }}
     """
     assert_parse_ok(code, parser)
+from test_helpers import parse_pss, get_symbol, has_symbol, get_location

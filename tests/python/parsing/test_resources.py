@@ -20,10 +20,15 @@ from ..test_helpers import parse_pss, assert_parse_ok, assert_parse_error
 def test_resource_simple_declaration(parser):
     """Test simple resource declaration"""
     code = """
-    resource channel_s {
-    };
+resource channel_s {
+};
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    sym = get_symbol(root, "channel_s")
+    assert sym is not None
+    loc = get_location(sym.getTarget())
+    assert loc is not None
+    assert loc[0] == 2
 
 
 def test_resource_with_fields(parser):
@@ -399,4 +404,4 @@ def test_resource_string_field(parser):
     """
     assert_parse_ok(code, parser)
 
-
+from ..test_helpers import get_symbol, has_symbol, get_location

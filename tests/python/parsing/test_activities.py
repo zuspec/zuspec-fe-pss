@@ -27,7 +27,10 @@ def test_activity_empty(parser):
         }
     }
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    comp = get_symbol(root, "pss_top")
+    assert comp is not None
+    assert has_symbol(comp, "test_a")
 
 
 def test_activity_simple_traversal(parser):
@@ -624,4 +627,4 @@ def test_activity_repeat_with_parallel(parser):
     }
     """
     assert_parse_ok(code, parser)
-
+from ..test_helpers import get_symbol, has_symbol, get_location

@@ -10,7 +10,7 @@ import pytest
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from test_helpers import assert_parse_ok, assert_parse_error
+from test_helpers import assert_parse_ok, assert_parse_error, parse_pss, get_symbol, has_symbol, get_location
 
 
 # =============================================================================
@@ -32,7 +32,12 @@ def test_foreach_array_basic(parser):
         }
     }
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    comp = get_symbol(root, "pss_top")
+    assert comp is not None
+    action = get_symbol(comp, "test_a")
+    assert action is not None
+    assert has_symbol(action, "arr")
 
 
 def test_foreach_with_index(parser):
@@ -639,103 +644,116 @@ def test_multiple_dynamic_constraints(parser, count):
 # not basic types like 'int'. These tests are skipped until we create
 # appropriate user-defined types to iterate over.
 
-@pytest.mark.skip(reason="Grammar requires type_identifier, not 'int' for iteration")
-def test_forall_basic(parser):
-    """Test basic forall constraint"""
+def test_forall_action_instances_basic(parser):
+    """Test forall constraint iterating over action instances by type"""
     code = """
     component pss_top {
-        action test_a {
-            rand int arr[5];
-            
+        action Sub {
+            rand int val;
+        }
+        action Top {
+            Sub s1, s2, s3;
             constraint {
-                forall (i : int in arr) {
-                    arr[i] > 0;
+                forall (a : Sub) {
+                    a.val > 0;
                 }
             }
         }
     }
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    comp = get_symbol(root, "pss_top")
+    assert comp is not None
+    assert has_symbol(comp, "Top")
 
 
-@pytest.mark.skip(reason="Grammar requires type_identifier, not 'int' for iteration")
-def test_forall_with_condition(parser):
-    """Test forall with conditional expression"""
+def test_forall_action_with_implication(parser):
+    """Test forall with implication on action instances"""
     code = """
     component pss_top {
-        action test_a {
-            rand int arr[10];
-            
+        action Sub {
+            rand int val;
+        }
+        action Top {
+            Sub s1, s2;
             constraint {
-                forall (i : int in arr) {
-                    (arr[i] > 5) -> (arr[i] < 100);
+                forall (a : Sub) {
+                    (a.val > 5) -> (a.val < 100);
                 }
             }
         }
     }
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    comp = get_symbol(root, "pss_top")
+    assert has_symbol(comp, "Top")
 
 
-@pytest.mark.skip(reason="Grammar requires type_identifier, not 'int' for iteration")
-def test_forall_multiple_constraints(parser):
-    """Test forall with multiple constraint expressions"""
+def test_forall_action_multiple_constraints(parser):
+    """Test forall with multiple constraints on action instances"""
     code = """
     component pss_top {
-        action test_a {
-            rand int arr[8];
-            
+        action Sub {
+            rand int val;
+        }
+        action Top {
+            Sub s1, s2, s3;
             constraint {
-                forall (i : int in arr) {
-                    arr[i] >= 0;
-                    arr[i] <= 255;
+                forall (a : Sub) {
+                    a.val >= 0;
+                    a.val <= 255;
                 }
             }
         }
     }
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    comp = get_symbol(root, "pss_top")
+    assert has_symbol(comp, "Top")
 
 
-@pytest.mark.skip(reason="Grammar requires type_identifier, not 'int' for iteration")
-def test_forall_nested(parser):
-    """Test nested forall constraints on separate arrays"""
+def test_forall_nested_types(parser):
+    """Test nested forall constraints with different action types"""
     code = """
     component pss_top {
-        action test_a {
-            rand int arr1[4];
-            rand int arr2[4];
-            
+        action A { rand int x; }
+        action B { rand int y; }
+        action Top {
+            A a1, a2;
+            B b1, b2;
             constraint {
-                forall (i : int in arr1) {
-                    forall (j : int in arr2) {
-                        arr1[i] != arr2[j];
+                forall (a : A) {
+                    forall (b : B) {
+                        a.x != b.y;
                     }
                 }
             }
         }
     }
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    comp = get_symbol(root, "pss_top")
+    assert has_symbol(comp, "Top")
 
 
-@pytest.mark.skip(reason="Grammar requires type_identifier, not 'int' for iteration")
-def test_forall_with_unique(parser):
-    """Test forall ensuring uniqueness using single pass"""
+def test_forall_with_field_ref(parser):
+    """Test forall with ref_path (in clause)"""
     code = """
     component pss_top {
-        action test_a {
-            rand int arr[5];
-            
+        action Sub { rand int val; }
+        action Top {
+            Sub s1, s2;
             constraint {
-                forall (i : int in arr) {
-                    arr[i] != arr[(i+1) % 5];
+                forall (a : Sub) {
+                    a.val > 0;
                 }
             }
         }
     }
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    comp = get_symbol(root, "pss_top")
+    assert has_symbol(comp, "Top")
 
 
 # =============================================================================

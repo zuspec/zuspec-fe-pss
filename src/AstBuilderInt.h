@@ -212,6 +212,8 @@ public:
 
     virtual antlrcpp::Any visitPyobj_type(PSSParser::Pyobj_typeContext *ctx) override;
 
+    virtual antlrcpp::Any visitTypedef_declaration(PSSParser::Typedef_declarationContext *ctx) override;
+
 	virtual antlrcpp::Any visitReference_type(PSSParser::Reference_typeContext *ctx) override;
 
 	// B.14 Constraints
@@ -423,4 +425,3 @@ private:
 
 }
 }
-

@@ -13,14 +13,20 @@ Tests cover:
 import pytest
 from zuspec.fe.pss import Parser
 from ..test_helpers import parse_pss, assert_parse_ok, assert_parse_error
+from ..test_helpers import get_symbol, has_symbol, get_location
 
 
 def test_enum_empty(parser):
     """Test empty enum declaration"""
     code = """
-    enum status_e {};
+enum status_e {};
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    sym = get_symbol(root, "status_e")
+    assert sym is not None
+    loc = get_location(sym)
+    assert loc is not None
+    assert loc[0] == 2 or loc[0] == 1
 
 
 def test_enum_single_item(parser):
@@ -34,9 +40,10 @@ def test_enum_single_item(parser):
 def test_enum_multiple_items(parser):
     """Test enum with multiple items"""
     code = """
-    enum color_e { RED, GREEN, BLUE };
+enum color_e { RED, GREEN, BLUE };
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    assert get_symbol(root, "color_e") is not None
 
 
 def test_enum_with_explicit_values(parser):
@@ -67,36 +74,45 @@ def test_enum_with_large_values(parser):
 def test_enum_in_struct(parser):
     """Test enum field in struct"""
     code = """
-    enum operation_e { READ, WRITE, EXECUTE };
-    
-    struct packet_s {
-        rand operation_e op;
-        rand bit[8] data;
-        
-        constraint {
-            op != EXECUTE;
-        }
-    };
-    """
-    assert_parse_ok(code, parser)
+enum operation_e { READ, WRITE, EXECUTE };
+struct packet_s {
+    rand operation_e op;
+    rand bit[8] data;
+    constraint {
+        op != EXECUTE;
+    }
+};
+"""
+    root = parse_pss(code, parser=parser)
+    assert get_symbol(root, "operation_e") is not None
+    pkt = get_symbol(root, "packet_s")
+    assert pkt is not None
+    assert has_symbol(pkt, "op")
+    assert has_symbol(pkt, "data")
+    loc = get_location(pkt)
+    assert loc is not None
 
 
 def test_enum_in_component(parser):
     """Test enum in component action"""
     code = """
-    enum mode_e { MODE_A, MODE_B, MODE_C };
-    
-    component my_c {
-        action test_a {
-            rand mode_e mode;
-            
-            constraint {
-                mode != MODE_A;
-            }
+enum mode_e { MODE_A, MODE_B, MODE_C };
+component my_c {
+    action test_a {
+        rand mode_e mode;
+        constraint {
+            mode != MODE_A;
         }
     }
-    """
-    assert_parse_ok(code, parser)
+}
+"""
+    root = parse_pss(code, parser=parser)
+    assert get_symbol(root, "mode_e") is not None
+    comp = get_symbol(root, "my_c")
+    assert comp is not None
+    action = get_symbol(comp, "test_a")
+    assert action is not None
+    assert has_symbol(action, "mode")
 
 
 def test_enum_with_negative_values(parser):

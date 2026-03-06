@@ -26,13 +26,16 @@ def test_package_empty(parser):
 def test_package_with_struct(parser):
     """Test package with struct"""
     code = """
-    package my_pkg {
-        struct my_s {
-            rand int value;
-        };
-    }
+package my_pkg {
+    struct my_s {
+        rand int value;
+    };
+}
     """
-    assert_parse_ok(code, parser)
+    root = parse_pss(code, parser=parser)
+    pkg = get_symbol(root, "my_pkg")
+    assert pkg is not None
+    assert has_symbol(pkg, "my_s")
 
 
 def test_package_with_enum(parser):
@@ -270,3 +273,4 @@ def test_package_import_chain(parser):
     import mid_pkg::*;
     """
     assert_parse_ok(code, parser)
+from ..test_helpers import get_symbol, has_symbol, get_location

@@ -79,7 +79,7 @@ cdef class Factory(object):
         global _inst
         if _inst is None:
             ext_dir = os.path.dirname(os.path.abspath(__file__))
-            build_dir = os.path.abspath(os.path.join(ext_dir, "../../build"))
+            build_dir = os.path.abspath(os.path.join(ext_dir, "../../../../build"))
 
             libname = "libzsp-parser.so"
             core_lib = None
