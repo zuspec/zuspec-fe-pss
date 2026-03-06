@@ -78,7 +78,18 @@ message("IVPM_CMAKE_PATH: ${IVPM_CMAKE_PATH} ${CMAKE_MODULE_PATH}")
 
 include(ivpm)
 
-Ivpm_AddPythonExtProject(debug-mgr debug_mgr)
+execute_process(
+    COMMAND ${PYTHON} -c "import debug_mgr, os; print(os.path.join(os.path.dirname(debug_mgr.__file__), 'share', 'include'))"
+    OUTPUT_VARIABLE debug_mgr_INCDIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+execute_process(
+    COMMAND ${PYTHON} -c "import debug_mgr, os; print(os.path.dirname(debug_mgr.__file__))"
+    OUTPUT_VARIABLE debug_mgr_LIBDIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+message("Set: debug_mgr_INCDIR=${debug_mgr_INCDIR}")
+message("Set: debug_mgr_LIBDIR=${debug_mgr_LIBDIR}")
 
 message("Note: CMAKE_INSTALL_PREFIX set to ${CMAKE_INSTALL_PREFIX}")
 
