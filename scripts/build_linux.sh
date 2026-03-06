@@ -4,7 +4,7 @@ yum update -y
 yum install -y glibc-static 
 yum install -y java-11-openjdk-devel uuid-devel libuuid-devel
 
-echo "BUILD_NUM=${BUILD_NUM}" >> python/zsp_parser/__build_num__.py
+echo "BUILD_NUM=${BUILD_NUM}" >> python/zuspec/fe/pss/__build_num__.py
 
 # Install ivpm with zip extraction fixes
 ${IVPM_PYTHON} -m pip install -U git+https://github.com/mballance/ivpm.git@fix-zip-extraction cython setuptools
