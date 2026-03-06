@@ -6,31 +6,31 @@ yum install -y java-11-openjdk-devel uuid-devel libuuid-devel
 
 echo "BUILD_NUM=${BUILD_NUM}" >> python/zuspec/fe/pss/__build_num__.py
 
-# Install ivpm with zip extraction fixes
-${IVPM_PYTHON} -m pip install -U git+https://github.com/mballance/ivpm.git@fix-zip-extraction cython setuptools
+${IVPM_PYTHON} -m pip install -U ivpm cython setuptools
 
-# Run ivpm update - should now work properly with the race condition fix
-${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages
+# Run ivpm update; antlr4-cpp-runtime may fail to extract due to nested
+# cmake _deps paths in the zip -- we handle that below.
+${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages || true
 
-# Debug: Check what's actually in the ANTLR directory
-echo "=== DEBUG START ==="
-echo "Checking packages/antlr4-cpp-runtime directory..."
-ls -la packages/antlr4-cpp-runtime/
-echo "Looking for CMakeLists.txt..."
-find packages/antlr4-cpp-runtime -name "CMakeLists.txt" -type f 2>&1
-echo "=== DEBUG END ==="
-
-# Additional verification right before build
-echo "=== PRE-BUILD CHECK ==="
-echo "Checking if CMakeLists.txt exists just before setup.py..."
-if [ -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
-    echo "YES - CMakeLists.txt exists"
-    ls -l packages/antlr4-cpp-runtime/CMakeLists.txt
-else
-    echo "NO - CMakeLists.txt does NOT exist!"
-    ls -la packages/antlr4-cpp-runtime/ || echo "Directory doesn't exist"
+# The antlr4-cpp-runtime zip contains runtime/_deps/googletest-src/... paths
+# that fail to extract in some manylinux containers.  Re-extract manually,
+# skipping those unneeded cmake-fetched test deps.
+if [ ! -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
+    echo "antlr4-cpp-runtime CMakeLists.txt missing -- re-extracting zip"
+    ANTLR4_URL=https://www.antlr.org/download/antlr4-cpp-runtime-4.13.2-source.zip
+    ANTLR4_ZIP=/tmp/antlr4-cpp-runtime.zip
+    curl -L -o "${ANTLR4_ZIP}" "${ANTLR4_URL}"
+    rm -rf packages/antlr4-cpp-runtime
+    mkdir -p packages/antlr4-cpp-runtime
+    ${IVPM_PYTHON} -c "
+from zipfile import ZipFile
+import os
+with ZipFile('${ANTLR4_ZIP}', 'r') as z:
+    for info in z.infolist():
+        if not info.filename.startswith('runtime/_deps'):
+            z.extract(info, 'packages/antlr4-cpp-runtime')
+"
 fi
-echo "=== END PRE-BUILD CHECK ==="
 
 PYTHON=./packages/python/bin/python
 ${PYTHON} -m pip install twine auditwheel ninja wheel cython
