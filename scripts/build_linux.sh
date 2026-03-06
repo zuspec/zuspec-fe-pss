@@ -8,9 +8,10 @@ echo "BUILD_NUM=${BUILD_NUM}" >> python/zuspec/fe/pss/__build_num__.py
 
 ${IVPM_PYTHON} -m pip install -U ivpm cython setuptools
 
-# Run ivpm update; antlr4-cpp-runtime may fail to extract due to nested
-# cmake _deps paths in the zip -- we handle that below.
-${IVPM_PYTHON} -m ivpm update -a --py-prerls-packages || true
+# Run ivpm update with the 'default' dep-set only (no -a / default-dev).
+# default-dev adds Sphinx/cairosvg/etc which pull in pre-release packages that
+# need Rust to compile from source and are not needed for wheel builds.
+${IVPM_PYTHON} -m ivpm update || true
 
 # The antlr4-cpp-runtime zip contains runtime/_deps/googletest-src/... paths
 # that fail to extract in some manylinux containers.  Re-extract manually,
