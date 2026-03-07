@@ -18,6 +18,7 @@
  * Created on:
  *     Author:
  */
+#include <set>
 #include "dmgr/impl/DebugMacros.h"
 #include "TaskFindPathElem.h"
 #include "TaskLinkActionCompRefFields.h"
@@ -30,8 +31,55 @@
 #include "zsp/parser/impl/TaskGetSubscriptSymbolScope.h"
 #include "zsp/parser/impl/TaskIsPyRef.h"
 
+#include <algorithm>
+
 namespace zsp {
 namespace parser {
+
+static int editDistance_rr(const std::string &a, const std::string &b) {
+    int m = a.size(), n = b.size();
+    std::vector<std::vector<int>> dp(m+1, std::vector<int>(n+1, 0));
+    for (int i = 0; i <= m; i++) dp[i][0] = i;
+    for (int j = 0; j <= n; j++) dp[0][j] = j;
+    for (int i = 1; i <= m; i++) {
+        for (int j = 1; j <= n; j++) {
+            int cost = (a[i-1] != b[j-1]) ? 1 : 0;
+            dp[i][j] = std::min({dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+cost});
+        }
+    }
+    return dp[m][n];
+}
+
+static std::string findCloseMatch_rr(
+        const std::string &name,
+        ast::ISymbolScope *scope,
+        int maxDist = 2) {
+    std::string best;
+    int bestDist = maxDist + 1;
+    if (!scope) return best;
+    for (auto &entry : scope->getSymtab()) {
+        int d = editDistance_rr(name, entry.first);
+        if (d > 0 && d < bestDist) {
+            bestDist = d;
+            best = entry.first;
+        }
+    }
+    for (auto &child : scope->getChildren()) {
+        ast::ISymbolEnumScope *enum_s =
+            dynamic_cast<ast::ISymbolEnumScope *>(child.get());
+        if (enum_s) {
+            for (auto &entry : enum_s->getSymtab()) {
+                int d = editDistance_rr(name, entry.first);
+                if (d > 0 && d < bestDist) {
+                    bestDist = d;
+                    best = entry.first;
+                }
+            }
+        }
+    }
+    return best;
+}
+
 
 
 
@@ -261,11 +309,27 @@ void TaskResolveRefs::visitExprRefPathContext(ast::IExprRefPathContext *i) {
         i->getHier_id()->getElems().at(0)->getId());
 
     if (!target) {
-        m_ctxt->addMarker(
-            MarkerSeverityE::Error,
-            i->getHier_id()->getElems().at(0)->getId()->getLocation(),
-            "failed to find root ref-path element %s",
-            i->getHier_id()->getElems().at(0)->getId()->getId().c_str());
+        const std::string &name = i->getHier_id()->getElems().at(0)->getId()->getId();
+        std::string suggestion = findCloseMatch_rr(
+            name, dynamic_cast<ast::ISymbolScope *>(m_ctxt->root()));
+        if (suggestion.empty() && m_ctxt->symtab()) {
+            suggestion = findCloseMatch_rr(
+                name, m_ctxt->symtab()->getScope());
+        }
+        if (suggestion.empty()) {
+            m_ctxt->addMarker(
+                MarkerSeverityE::Error,
+                i->getHier_id()->getElems().at(0)->getId()->getLocation(),
+                "unknown identifier '%s'",
+                name.c_str());
+        } else {
+            m_ctxt->addMarker(
+                MarkerSeverityE::Error,
+                i->getHier_id()->getElems().at(0)->getId()->getLocation(),
+                "unknown identifier '%s'; did you mean '%s'?",
+                name.c_str(),
+                suggestion.c_str());
+        }
 
         DEBUG_LEAVE("visitExprRefPathContext -- fail");
         return;
@@ -287,7 +351,53 @@ void TaskResolveRefs::visitExprRefPathContext(ast::IExprRefPathContext *i) {
 
     DEBUG("target_c=%p target_s=%p", target_c, target_s);
 
-    if (!target_s && i->getHier_id()->getElems().size() > 1) {
+    // Check if target_c is a field or local variable with a built-in type that has methods (e.g., string)
+    bool is_builtin_with_methods = false;
+    ast::IDataType *target_type = 0;
+    
+    if (!target_s && target_c) {
+        // Check if it's a field declaration
+        ast::IField *field = dynamic_cast<ast::IField *>(target_c);
+        if (field && field->getType()) {
+            target_type = field->getType();
+        }
+        
+        // Check if it's a procedural data declaration (local variable)
+        if (!target_type) {
+            ast::IProceduralStmtDataDeclaration *var_decl = 
+                dynamic_cast<ast::IProceduralStmtDataDeclaration *>(target_c);
+            if (var_decl && var_decl->getDatatype()) {
+                target_type = var_decl->getDatatype();
+            }
+        }
+        
+        // Check if the type is a string
+        if (target_type) {
+            ast::IDataTypeString *string_type = dynamic_cast<ast::IDataTypeString *>(target_type);
+            if (string_type) {
+                is_builtin_with_methods = true;
+                DEBUG("Found string variable '%s' - allowing method calls", 
+                    i->getHier_id()->getElems().at(0)->getId()->getId().c_str());
+            }
+            if (!is_builtin_with_methods) {
+                ast::IDataTypeUserDefined *udt = dynamic_cast<ast::IDataTypeUserDefined *>(target_type);
+                if (udt && udt->getType_id() && !udt->getType_id()->getElems().empty()) {
+                    const std::string &tname = udt->getType_id()->getElems().at(0)->getId()->getId();
+                    static const std::set<std::string> collection_types = {
+                        "list", "array", "set", "map"
+                    };
+                    if (collection_types.find(tname) != collection_types.end()) {
+                        is_builtin_with_methods = true;
+                        DEBUG("Found collection variable '%s' (type %s) - allowing method calls",
+                            i->getHier_id()->getElems().at(0)->getId()->getId().c_str(),
+                            tname.c_str());
+                    }
+                }
+            }
+        }
+    }
+
+    if (!target_s && !is_builtin_with_methods && i->getHier_id()->getElems().size() > 1) {
         m_ctxt->addMarker(
             MarkerSeverityE::Error,
             i->getHier_id()->getElems().at(0)->getId()->getLocation(),
@@ -351,6 +461,56 @@ void TaskResolveRefs::visitExprRefPathContext(ast::IExprRefPathContext *i) {
             break;
         }
 
+        // Special handling for string and collection methods
+        if (!target_s && is_builtin_with_methods && ii == 1) {
+            // This is a method call on a built-in type - validate method name
+            std::string method_name = elem->getId()->getId();
+            static const std::set<std::string> valid_string_methods = {
+                "size", "len",
+                "find", "rfind", "find_last", "find_all",
+                "substr",
+                "lower", "upper", "to_lower", "to_upper",
+                "starts_with", "ends_with", "trim",
+                "split", "chars"
+            };
+            static const std::set<std::string> valid_collection_methods = {
+                "size",
+                "push_back", "pop_back", "push_front", "pop_front",
+                "insert", "delete", "clear",
+                "contains", "find",
+                "sort", "rsort", "shuffle", "reverse", "unique",
+                "join", "str_from_chars",
+                "keys", "values",
+                "front", "back",
+                "set", "get"
+            };
+            static const std::set<std::string> all_builtin_methods = [] {
+                std::set<std::string> merged = valid_string_methods;
+                merged.insert(valid_collection_methods.begin(), valid_collection_methods.end());
+                return merged;
+            }();
+            
+            if (all_builtin_methods.find(method_name) != all_builtin_methods.end()) {
+                DEBUG("Valid built-in method: %s", method_name.c_str());
+                elem->setTarget(-2);
+                if (elem->getParams()) {
+                    DEBUG_ENTER("Resolve built-in method parameters");
+                    for (auto it=elem->getParams()->getParameters().begin();
+                        it!=elem->getParams()->getParameters().end(); it++) {
+                        (*it)->accept(m_this);
+                    }
+                    DEBUG_LEAVE("Resolve built-in method parameters");
+                }
+                break;
+            } else {
+                m_ctxt->addErrorMarker(
+                    elem->getId()->getLocation(),
+                    "unknown method '%s' on built-in type", 
+                    method_name.c_str());
+                break;
+            }
+        }
+
         TaskFindPathElem::Result res = TaskFindPathElem(
             m_ctxt->getDebugMgr(), 
             m_ctxt->root()).find(
@@ -362,15 +522,52 @@ void TaskResolveRefs::visitExprRefPathContext(ast::IExprRefPathContext *i) {
             target_s->getSymtab().find(elem->getId()->getId());
         
         if (!res.sym) {
+            static const std::set<std::string> valid_collection_methods = {
+                "size",
+                "push_back", "pop_back", "push_front", "pop_front",
+                "insert", "delete", "clear",
+                "contains", "find",
+                "sort", "rsort", "shuffle", "reverse", "unique",
+                "join", "str_from_chars",
+                "keys", "values",
+                "front", "back",
+                "set", "get"
+            };
+            bool is_collection_method = false;
+            auto isCollectionScope = [](ast::ISymbolScope *s) -> bool {
+                if (!s) return false;
+                const std::string &n = s->getName();
+                return (n.rfind("list", 0) == 0 || n.rfind("array", 0) == 0 ||
+                        n.rfind("set", 0) == 0 || n.rfind("map", 0) == 0);
+            };
+            if (isCollectionScope(target_s)) {
+                DEBUG("Collection method check: target_s name='%s' method='%s'",
+                    target_s->getName().c_str(), elem->getId()->getId().c_str());
+                const std::string &mname = elem->getId()->getId();
+                if (valid_collection_methods.count(mname)) {
+                    is_collection_method = true;
+                    elem->setTarget(-2);
+                    if (elem->getParams()) {
+                        for (auto pit=elem->getParams()->getParameters().begin();
+                            pit!=elem->getParams()->getParameters().end(); pit++) {
+                            (*pit)->accept(m_this);
+                        }
+                    }
+                    break;
+                }
+            }
+            if (!is_collection_method) {
+            DEBUG("Not collection method. target_s=%p name='%s'",
+                target_s, target_s ? target_s->getName().c_str() : "<null>");
             m_ctxt->addErrorMarker(
                 elem->getId()->getLocation(),
                 "Failed to find elem %s", 
                 elem->getId()->getId().c_str());
-
             DEBUG("ERROR: Failed to find elem %s (ii=%d)", 
                 elem->getId()->getId().c_str(),
                 ii);
             break;
+            }
         } else {
             DEBUG("NOTE: Found sub-element %s", elem->getId()->getId().c_str());
             elem->setTarget(res.idx);

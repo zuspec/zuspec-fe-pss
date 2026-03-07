@@ -60,6 +60,8 @@ public:
 
     virtual void visitEnumDecl(ast::IEnumDecl *i) override;
 
+    virtual void visitTypedefDeclaration(ast::ITypedefDeclaration *i) override;
+
     virtual void visitEnumItem(ast::IEnumItem *i) override;
 
     virtual void visitExecBlock(ast::IExecBlock *i) override;
@@ -155,5 +157,4 @@ private:
 
 }
 }
-
 

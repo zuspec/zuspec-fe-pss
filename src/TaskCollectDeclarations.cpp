@@ -36,6 +36,8 @@
 	fprintf(stdout, fmt, ##__VA_ARGS__); \
 	fprintf(stdout, "\n");
 
+#include "Marker.h"
+
 namespace zsp {
 namespace parser {
 
@@ -160,7 +162,11 @@ void TaskCollectDeclarations::visitTypeScope(ast::ITypeScope *i) {
 void TaskCollectDeclarations::duplicateSymbolDeclError(
         ast::IScopeChild            *new_sym,
         ast::IScopeChild            *ex_sym) {
-    fprintf(stdout, "Error: duplicate symbol\n");
+    Marker m(
+        "duplicate symbol declaration",
+        MarkerSeverityE::Error,
+        new_sym->getLocation());
+    m_listener->marker(&m);
 }
 
 }

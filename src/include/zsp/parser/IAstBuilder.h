@@ -9,6 +9,7 @@
 #include <iostream>
 #include <memory>
 #include "zsp/parser/IMarkerListener.h"
+#include "zsp/parser/IParseProfileInfo.h"
 #include "zsp/ast/IGlobalScope.h"
 #include "zsp/ast/IFactory.h"
 
@@ -38,6 +39,8 @@ public:
     virtual void setEnableProfile(bool e) = 0;
 
     virtual bool getEnableProfile() = 0;
+
+    virtual IParseProfileInfo *getProfileInfo() = 0;
 
 };
 

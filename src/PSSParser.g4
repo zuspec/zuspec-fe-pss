@@ -382,7 +382,7 @@ function_decl:
 	;
 
 platform_qualifier: 
-	TOK_TARGET
+	TOK_TARGET TOK_SOLVE?
 	| TOK_SOLVE
 	;
 
@@ -482,6 +482,7 @@ procedural_stmt:
 	| procedural_continue_stmt
 	| procedural_data_declaration // TODO: positioning this first causes assign to be incorrectly recognized as data_declaration
     | procedural_yield_stmt
+	| procedural_randomization_stmt
 	| TOK_SEMICOLON
 	;
 
@@ -552,6 +553,19 @@ procedural_continue_stmt:
 procedural_yield_stmt:
     TOK_YIELD TOK_SEMICOLON
     ;
+
+procedural_randomization_stmt:
+	TOK_RANDOMIZE procedural_randomization_target procedural_randomization_term
+	;
+
+procedural_randomization_target:
+	hierarchical_id (TOK_COMMA hierarchical_id)*
+	;
+
+procedural_randomization_term:
+	(TOK_WITH constraint_set)
+	| TOK_SEMICOLON
+	;
 	
 /********************************************************************
  * B.8 Component declarations
@@ -595,6 +609,7 @@ component_body_item:
 	| attr_group
 	| component_body_compile_if
     | monitor_declaration
+    | abstract_monitor_declaration
     | cover_stmt
     | activity_declaration /* zuspec extension */
  	| TOK_SEMICOLON
@@ -668,6 +683,7 @@ labeled_activity_stmt:
 	| activity_match_stmt
 	| activity_replicate_stmt
 	| activity_super_stmt
+	| activity_atomic_block_stmt
 	| symbol_call
 	;
 
@@ -706,6 +722,13 @@ activity_schedule_stmt:
 	TOK_LCBRACE
 		activity_stmt_ann*
 	TOK_RCBRACE 
+	;
+
+activity_atomic_block_stmt:
+	TOK_ATOMIC
+	TOK_LCBRACE
+		activity_stmt_ann*
+	TOK_RCBRACE
 	;
 
 activity_join_spec:
@@ -949,7 +972,7 @@ monitor_activity_concat_stmt:
     ;
 
 monitor_activity_eventually_stmt: 
-    TOK_EVENTUALLY monitor_activity_stmt TOK_SEMICOLON
+    TOK_EVENTUALLY labeled_monitor_activity_stmt
     ;
 
 monitor_activity_overlap_stmt: 
@@ -1711,7 +1734,11 @@ hierarchical_id:
 	;
 
 member_path_elem:
-	identifier function_parameter_list? ( TOK_LSBRACE expression TOK_RSBRACE )*
+	identifier function_parameter_list? member_path_elem_index*
+	;
+
+member_path_elem_index:
+	TOK_LSBRACE expression (TOK_ELIPSIS expression?)? TOK_RSBRACE
 	;
 
 

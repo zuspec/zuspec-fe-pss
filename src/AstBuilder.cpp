@@ -7,11 +7,15 @@
 
 #include <stdio.h>
 #include "AstBuilder.h"
+#include "atn/ParseInfo.h"
+#include "ParseProfileInfo.h"
 
 #include "AstBuilderInt.h"
 
 namespace zsp {
 namespace parser {
+
+using namespace antlr4;
 
 
 AstBuilder::AstBuilder(
@@ -55,6 +59,19 @@ void AstBuilder::setEnableProfile(bool e) {
 
 bool AstBuilder::getEnableProfile() {
     return m_builder_int->getEnableProfile();
+}
+
+bool AstBuilder::hasProfileInfo() const {
+    return m_builder_int->hasProfileInfo();
+}
+
+IParseProfileInfo *AstBuilder::getProfileInfo() {
+    const std::vector<atn::DecisionInfo> *decisions = m_builder_int->getProfileInfo();
+    if (decisions) {
+        ParseProfileInfo *info = new ParseProfileInfo(*decisions);
+        return info;
+    }
+    return nullptr;
 }
 
 }

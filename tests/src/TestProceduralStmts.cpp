@@ -74,8 +74,8 @@ TEST_F(TestProceduralStmts, nested_if_else_vars) {
 TEST_F(TestProceduralStmts, iteration_var) {
     const char *text = R"(
         function void doit(int pval) {
+            int x;
             repeat (i : 20) {
-                i = i + 1;
                 x = i;
             }
         }
@@ -212,6 +212,412 @@ TEST_F(TestProceduralStmts, exec_iteration_var_3) {
         &marker_c,
         text,
         "nested_if_else_vars.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, repeat_sum_example) {
+    const char *text = R"(
+        function int sum(int a, int b) {
+            int res;
+            res = 0;
+            repeat(b) {
+                res = res + a;
+            }
+            return res;
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "repeat_sum.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, while_parity_example) {
+    const char *text = R"(
+        function bool get_parity(int n) {
+            bool parity;
+            parity = false;
+            while (n != 0) {
+                parity = !parity;
+                n = n & (n-1);
+            }
+            return parity;
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "while_parity.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, if_else_max_example) {
+    const char *text = R"(
+        function int max(int a, int b) {
+            int c;
+            if (a > b) {
+                c = a;
+            } else {
+                c = b;
+            }
+            return c;
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "if_else_max.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, match_bucketize_example) {
+    const char *text = R"(
+        function int bucketize(int a) {
+            int res;
+            match (a) {
+                [0..3]:  res = 1;
+                [4..7]:  res = 2;
+                [8..15]: res = 3;
+                default: res = 4;
+            }
+            return res;
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "match_bucketize.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, foreach_break_continue_example) {
+    const char *text = R"(
+        function int sum(array<int,100> a) {
+            int res;
+            res = 0;
+            foreach (el : a) {
+                if (el == 0)
+                    break;
+                if (el == 42)
+                    continue;
+                if ((el % 2) == 0) {
+                    res = res + el;
+                }
+            }
+            return res;
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "foreach_break_continue.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, foreach_with_index) {
+    const char *text = R"(
+        function int sum_indexed(array<int,10> a) {
+            int res;
+            res = 0;
+            foreach (el : a[i]) {
+                res = res + el + i;
+            }
+            return res;
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "foreach_with_index.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, nested_loops_with_vars) {
+    const char *text = R"(
+        function void nested_loops() {
+            int outer_sum;
+            outer_sum = 0;
+            repeat (i : 10) {
+                int inner_sum;
+                inner_sum = 0;
+                repeat (j : 5) {
+                    inner_sum = inner_sum + j;
+                }
+                outer_sum = outer_sum + inner_sum + i;
+            }
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "nested_loops.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, repeat_while_variant) {
+    const char *text = R"(
+        function int count_down(int n) {
+            int counter;
+            counter = n;
+            repeat {
+                counter = counter - 1;
+            } while (counter > 0);
+            return counter;
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "repeat_while.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, scoped_blocks) {
+    const char *text = R"(
+        function void test_scopes() {
+            int a;
+            a = 1;
+            {
+                int b;
+                b = a + 1;
+                {
+                    int c;
+                    c = b + 1;
+                }
+            }
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "scoped_blocks.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, variable_shadowing) {
+    const char *text = R"(
+        function void test_shadowing() {
+            int x;
+            x = 10;
+            {
+                int x;
+                x = 20;
+            }
+            x = 30;
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "variable_shadowing.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, exec_with_foreach_list) {
+    const char *text = R"(
+        component pss_top {
+            action Entry {
+                list<int> my_list;
+                exec body {
+                    int sum;
+                    sum = 0;
+                    foreach (val : my_list) {
+                        sum = sum + val;
+                    }
+                }
+            }
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "exec_foreach_list.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, match_no_default) {
+    const char *text = R"(
+        function int classify(int value) {
+            int result;
+            match (value) {
+                [0]:     result = 0;
+                [1..10]: result = 1;
+            }
+            return result;
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "match_no_default.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, nested_if_with_match) {
+    const char *text = R"(
+        function int complex_decision(int a, int b) {
+            int result;
+            if (a > 0) {
+                match (b) {
+                    [0..5]:  result = 1;
+                    [6..10]: result = 2;
+                    default: result = 3;
+                }
+            } else {
+                result = 0;
+            }
+            return result;
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "nested_if_match.pss",
+        files,
+        root,
+        false);
+}
+
+TEST_F(TestProceduralStmts, compound_assignments) {
+    const char *text = R"(
+        function void test_compound() {
+            int x;
+            x = 10;
+            x = x + 5;
+            x = x - 3;
+            x = x * 2;
+            x = x / 4;
+        }
+    )";
+
+    enableDebug(true);
+    MarkerCollector marker_c; 
+
+    std::vector<ast::IGlobalScopeUP> files;
+    ast::ISymbolScopeUP root;
+
+    parseLink(
+        &marker_c,
+        text,
+        "compound_assignments.pss",
         files,
         root,
         false);

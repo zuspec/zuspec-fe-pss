@@ -29,8 +29,42 @@
 #include "TaskResolveFieldRef.h"
 #include "Marker.h"
 
+#include <algorithm>
+
 namespace zsp {
 namespace parser {
+
+static int editDistance(const std::string &a, const std::string &b) {
+    int m = a.size(), n = b.size();
+    std::vector<std::vector<int>> dp(m+1, std::vector<int>(n+1, 0));
+    for (int i = 0; i <= m; i++) dp[i][0] = i;
+    for (int j = 0; j <= n; j++) dp[0][j] = j;
+    for (int i = 1; i <= m; i++) {
+        for (int j = 1; j <= n; j++) {
+            int cost = (a[i-1] != b[j-1]) ? 1 : 0;
+            dp[i][j] = std::min({dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+cost});
+        }
+    }
+    return dp[m][n];
+}
+
+static std::string findCloseMatch(
+        const std::string &name,
+        ast::ISymbolScope *scope,
+        int maxDist = 2) {
+    std::string best;
+    int bestDist = maxDist + 1;
+    if (!scope) return best;
+    for (auto &entry : scope->getSymtab()) {
+        int d = editDistance(name, entry.first);
+        if (d > 0 && d < bestDist) {
+            bestDist = d;
+            best = entry.first;
+        }
+    }
+    return best;
+}
+
 
 
 TaskResolveRef::TaskResolveRef(
@@ -187,14 +221,24 @@ void TaskResolveRef::visitTypeIdentifier(ast::ITypeIdentifier *i) {
     ast::ISymbolRefPath *root = findRoot(i->getElems().at(0)->getId());
 
     if (!root) {
-        // resolution failure
-        DEBUG("Note: failed to resolve root symbol %s",
-            i->getElems().at(0)->getId()->getId().c_str());
-        m_ctxt->addMarker(
-            MarkerSeverityE::Error,
-            i->getElems().at(0)->getId()->getLocation(),
-            "resolution failed for %s",
-            i->getElems().at(0)->getId()->getId().c_str());
+        const std::string &name = i->getElems().at(0)->getId()->getId();
+        DEBUG("Note: failed to resolve root symbol %s", name.c_str());
+        std::string suggestion = findCloseMatch(
+            name, dynamic_cast<ast::ISymbolScope *>(m_ctxt->root()));
+        if (suggestion.empty()) {
+            m_ctxt->addMarker(
+                MarkerSeverityE::Error,
+                i->getElems().at(0)->getId()->getLocation(),
+                "unknown type '%s'",
+                name.c_str());
+        } else {
+            m_ctxt->addMarker(
+                MarkerSeverityE::Error,
+                i->getElems().at(0)->getId()->getLocation(),
+                "unknown type '%s'; did you mean '%s'?",
+                name.c_str(),
+                suggestion.c_str());
+        }
         return;
     }
 

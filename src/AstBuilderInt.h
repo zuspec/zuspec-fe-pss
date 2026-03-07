@@ -12,6 +12,7 @@
 #include "zsp/parser/IMarkerListener.h"
 #include "PSSParserBaseVisitor.h"
 #include "BaseErrorListener.h"
+#include "atn/ParseInfo.h"
 #include "zsp/ast/IExprId.h"
 #include "zsp/ast/IFactory.h"
 #include "zsp/ast/IGlobalScope.h"
@@ -61,6 +62,14 @@ public:
 
     virtual bool getEnableProfile() {
         return m_enableProfile;
+    }
+
+    virtual bool hasProfileInfo() const {
+        return !m_profile_decisions.empty();
+    }
+
+    virtual const std::vector<atn::DecisionInfo> *getProfileInfo() const {
+        return m_profile_decisions.empty() ? nullptr : &m_profile_decisions;
     }
 
 	// B.1 package declaration
@@ -138,9 +147,32 @@ public:
 
     virtual antlrcpp::Any visitProcedural_yield_stmt(PSSParser::Procedural_yield_stmtContext *ctx) override;
 
+    virtual antlrcpp::Any visitProcedural_randomization_stmt(PSSParser::Procedural_randomization_stmtContext *ctx) override;
+
 	// B.8 Component declarations
 
 	virtual antlrcpp::Any visitComponent_declaration(PSSParser::Component_declarationContext *ctx) override;
+
+	// Monitor declarations (PSS 3.0)
+	virtual antlrcpp::Any visitMonitor_declaration(PSSParser::Monitor_declarationContext *ctx) override;
+
+	virtual antlrcpp::Any visitAbstract_monitor_declaration(PSSParser::Abstract_monitor_declarationContext *ctx);
+
+	virtual antlrcpp::Any visitMonitor_activity_declaration(PSSParser::Monitor_activity_declarationContext *ctx) override;
+
+	virtual antlrcpp::Any visitMonitor_activity_sequence_block_stmt(PSSParser::Monitor_activity_sequence_block_stmtContext *ctx) override;
+
+	virtual antlrcpp::Any visitMonitor_activity_concat_stmt(PSSParser::Monitor_activity_concat_stmtContext *ctx) override;
+
+	virtual antlrcpp::Any visitMonitor_activity_eventually_stmt(PSSParser::Monitor_activity_eventually_stmtContext *ctx) override;
+
+	virtual antlrcpp::Any visitMonitor_activity_overlap_stmt(PSSParser::Monitor_activity_overlap_stmtContext *ctx) override;
+
+	virtual antlrcpp::Any visitMonitor_activity_schedule_stmt(PSSParser::Monitor_activity_schedule_stmtContext *ctx) override;
+
+	virtual antlrcpp::Any visitMonitor_activity_monitor_traversal_stmt(PSSParser::Monitor_activity_monitor_traversal_stmtContext *ctx) override;
+
+	virtual antlrcpp::Any visitCover_stmt(PSSParser::Cover_stmtContext *ctx) override;
 
 	// B.9 Activity statements
 
@@ -155,6 +187,8 @@ public:
 	virtual antlrcpp::Any visitActivity_schedule_stmt(PSSParser::Activity_schedule_stmtContext *ctx) override;
 
 	virtual antlrcpp::Any visitActivity_repeat_stmt(PSSParser::Activity_repeat_stmtContext *ctx) override;
+
+	virtual antlrcpp::Any visitActivity_atomic_block_stmt(PSSParser::Activity_atomic_block_stmtContext *ctx) override;
 
 	// B.11 Data declarations
 
@@ -177,6 +211,8 @@ public:
     virtual antlrcpp::Any visitEnum_declaration(PSSParser::Enum_declarationContext *ctx) override;
 
     virtual antlrcpp::Any visitPyobj_type(PSSParser::Pyobj_typeContext *ctx) override;
+
+    virtual antlrcpp::Any visitTypedef_declaration(PSSParser::Typedef_declarationContext *ctx) override;
 
 	virtual antlrcpp::Any visitReference_type(PSSParser::Reference_typeContext *ctx) override;
 
@@ -367,6 +403,7 @@ private:
     int32_t                                     m_file_id;
 	bool										m_collectDocStrings;
     bool                                        m_enableProfile;
+    std::vector<atn::DecisionInfo>              m_profile_decisions;
     IMarkerListener								*m_marker_l;
 	ast::IFactory								*m_factory;
 	ast::IExpr									*m_expr;
@@ -388,4 +425,3 @@ private:
 
 }
 }
-

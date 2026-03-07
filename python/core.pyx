@@ -1,15 +1,24 @@
+# cython: language_level=3
 
 import ctypes
 from enum import IntEnum
 import os
 cimport debug_mgr.core as dm_core
-cimport zsp_parser.ast as ast
-cimport zsp_parser.ast_decl as ast_decl
-cimport zsp_parser.decl as decl
+cimport debug_mgr.decl as dm_decl
+cimport zuspec.fe.pss.ast as ast
+cimport zuspec.fe.pss.ast_decl as ast_decl
+cimport zuspec.fe.pss.decl as decl
 from ciostream.core cimport cistream
 from libc.stdint cimport intptr_t
 from libcpp.vector cimport vector as std_vector
 from libcpp.cast cimport dynamic_cast
+
+# Import the C++ resolveSymbolPathRef function
+cdef extern from "PyParserUtils.h" namespace "zsp::parser":
+    ast_decl.IScopeChild *c_resolveSymbolPathRef "zsp::parser::PyParserUtils::resolveSymbolPathRef" (
+        dm_decl.IDebugMgr              *dmgr,
+        ast_decl.ISymbolChildrenScope    *root,
+        const ast_decl.ISymbolRefPath    *ref)
 
 cdef Factory _inst = None
 cdef class Factory(object):
@@ -70,7 +79,7 @@ cdef class Factory(object):
         global _inst
         if _inst is None:
             ext_dir = os.path.dirname(os.path.abspath(__file__))
-            build_dir = os.path.abspath(os.path.join(ext_dir, "../../build"))
+            build_dir = os.path.abspath(os.path.join(ext_dir, "../../../../build"))
 
             libname = "libzsp-parser.so"
             core_lib = None
@@ -103,7 +112,8 @@ cdef class Factory(object):
 cdef class AstBuilder(object):
 
     def __dealloc__(self):
-        del self._hndl
+        if self._owned:
+            del self._hndl
 
     cpdef build(self,
         ast.GlobalScope         root,
@@ -122,10 +132,24 @@ cdef class AstBuilder(object):
     cpdef bool getCollectDocStrings(self):
         return self._hndl.getCollectDocStrings()
 
+    cpdef void setEnableProfile(self, bool enable):
+        self._hndl.setEnableProfile(enable)
+
+    cpdef bool getEnableProfile(self):
+        return self._hndl.getEnableProfile()
+
+    cpdef ParseProfileInfo getProfileInfo(self):
+        cdef decl.IParseProfileInfo *profile_info
+        profile_info = self._hndl.getProfileInfo()
+        if profile_info != NULL:
+            return ParseProfileInfo.mk(profile_info, True)
+        return None
+
     @staticmethod
-    cdef AstBuilder mk(decl.IAstBuilder *hndl):
+    cdef AstBuilder mk(decl.IAstBuilder *hndl, bool owned=False):
         ret = AstBuilder()
         ret._hndl = hndl
+        ret._owned = owned
         return ret
 
 cdef class Linker(object):
@@ -195,10 +219,6 @@ cdef class LookupLocationResult(object):
 
 cdef class Marker(object):
 
-    def __dealloc__(self):
-        if self._owned:
-            del self._hndl
-    
     cpdef str msg(self):
         return self._hndl.msg().decode()
 
@@ -207,8 +227,8 @@ cdef class Marker(object):
         return MarkerSeverityE(severity_i)
 
     cpdef Location loc(self):
-        cdef const ast_decl.Location *lp = &self._hndl.loc()
-        return Location(lp.fileid, lp.lineno, lp.linepos)
+        cdef const ast_decl.Location *loc_ref = &(self._hndl.loc())
+        return Location(loc_ref.fileid, loc_ref.lineno, loc_ref.linepos)
 
     @staticmethod
     cdef Marker mk(decl.IMarker *hndl, bool owned=True):
@@ -218,9 +238,6 @@ cdef class Marker(object):
         return ret
 
 cdef class MarkerListener(object):
-    def __dealloc__(self):
-        if self._owned:
-            del self._hndl
 
     cpdef bool hasSeverity(self, s):
         cdef int s_i = int(s)
@@ -246,7 +263,7 @@ cdef class MarkerCollector(MarkerListener):
         return Marker.mk(marker, False)
 
     cdef decl.IMarkerCollector *asCollector(self):
-        return dynamic_cast[decl.IMarkerCollectorP](self._hndl)
+        return <decl.IMarkerCollector *>dynamic_cast[decl.IMarkerCollectorP](self._hndl)
 
     @staticmethod
     cdef MarkerCollector mk(decl.IMarkerCollector *hndl, bool owned=True):
@@ -256,10 +273,6 @@ cdef class MarkerCollector(MarkerListener):
         return ret
 
 cdef class SymbolTableIterator(object):
-
-    def __dealloc__(self):
-        if self._owned:
-            del self._hndl
 
     @staticmethod
     cdef SymbolTableIterator mk(decl.ISymbolTableIterator *hndl, bool owned=True):
@@ -278,7 +291,7 @@ cpdef ast.ScopeChild resolveSymbolPathRef(
     if ref is None:
         raise Exception("Cannot resolve a None ref")
     else:
-        ret = decl.resolveSymbolPathRef(
+        ret = c_resolveSymbolPathRef(
             dmgr._hndl,
             root.asSymbolChildrenScope(),
             ref.asSymbolRefPath())
@@ -287,5 +300,123 @@ cpdef ast.ScopeChild resolveSymbolPathRef(
             return None
         else:
             of = ast.ObjFactory()
-            ret.accept(of._hndl)
+            ret.accept(<ast_decl.VisitorBase *>(of._hndl))
             return of._obj
+
+cdef class DecisionProfileInfo(object):
+
+    def __dealloc__(self):
+        if self._owned:
+            del self._hndl
+
+    @property
+    def decision(self):
+        return self._hndl.getDecision()
+
+    @property
+    def invocations(self):
+        return self._hndl.getInvocations()
+
+    @property
+    def time_in_prediction(self):
+        return self._hndl.getTimeInPrediction()
+
+    @property
+    def sll_lookahead_ops(self):
+        return self._hndl.getSLLLookaheadOps()
+
+    @property
+    def ll_lookahead_ops(self):
+        return self._hndl.getLLLookaheadOps()
+
+    @property
+    def sll_atn_transitions(self):
+        return self._hndl.getSLLATNTransitions()
+
+    @property
+    def ll_atn_transitions(self):
+        return self._hndl.getLLATNTransitions()
+
+    @property
+    def ll_fallback(self):
+        return self._hndl.getLLFallback()
+
+    @property
+    def ambiguity_count(self):
+        return self._hndl.getAmbiguityCount()
+
+    @property
+    def context_sensitivity_count(self):
+        return self._hndl.getContextSensitivityCount()
+
+    @property
+    def error_count(self):
+        return self._hndl.getErrorCount()
+
+    @property
+    def max_lookahead(self):
+        return self._hndl.getMaxLookahead()
+
+    @staticmethod
+    cdef DecisionProfileInfo mk(decl.IDecisionProfileInfo *hndl, bool owned=True):
+        ret = DecisionProfileInfo()
+        ret._hndl = hndl
+        ret._owned = owned
+        return ret
+
+cdef class ParseProfileInfo(object):
+
+    def __dealloc__(self):
+        if self._owned:
+            del self._hndl
+
+    def get_decision_info(self):
+        cdef std_vector[decl.IDecisionProfileInfo*] decisions
+        cdef size_t i
+        decisions = self._hndl.getDecisionInfo()
+        
+        result = []
+        for i in range(decisions.size()):
+            # owned=False because ParseProfileInfo owns these pointers
+            result.append(DecisionProfileInfo.mk(decisions[i], False))
+        
+        return result
+
+    def get_ll_decisions(self):
+        return self._hndl.getLLDecisions()
+
+    @property
+    def total_time_in_prediction(self):
+        return self._hndl.getTotalTimeInPrediction()
+
+    @property
+    def total_sll_lookahead_ops(self):
+        return self._hndl.getTotalSLLLookaheadOps()
+
+    @property
+    def total_ll_lookahead_ops(self):
+        return self._hndl.getTotalLLLookaheadOps()
+
+    @property
+    def total_sll_atn_lookahead_ops(self):
+        return self._hndl.getTotalSLLATNLookaheadOps()
+
+    @property
+    def total_ll_atn_lookahead_ops(self):
+        return self._hndl.getTotalLLATNLookaheadOps()
+
+    @property
+    def total_atn_lookahead_ops(self):
+        return self._hndl.getTotalATNLookaheadOps()
+
+    @property
+    def dfa_size(self):
+        return self._hndl.getDFASize()
+
+    @staticmethod
+    cdef ParseProfileInfo mk(decl.IParseProfileInfo *hndl, bool owned=True):
+        ret = ParseProfileInfo()
+        ret._hndl = hndl
+        ret._owned = owned
+        return ret
+

@@ -39,6 +39,7 @@ TOK_INOUT: 'inout';
 TOK_LOCK: 'lock';
 TOK_SHARE: 'share';
 TOK_RAND: 'rand';
+TOK_RANDOMIZE: 'randomize';
 TOK_PUBLIC: 'public';
 TOK_PROTECTED: 'protected';
 TOK_PRIVATE: 'private';
@@ -54,6 +55,7 @@ TOK_STATE: 'state';
 TOK_REF: 'ref';
 TOK_RESOURCE: 'resource';
 TOK_YIELD: 'yield';
+TOK_ATOMIC: 'atomic';
 
 /* Make exec-block kinds local instead
    of global keywords

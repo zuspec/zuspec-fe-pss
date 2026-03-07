@@ -47,7 +47,7 @@ def main():
 
     cmd = [sys.executable, "-m", "astbuilder", "gen-pyext", "-name", "ast"]
     cmd.extend(["-namespace", "zsp::ast", "-astdir", os.path.join(proj_dir, "ast")])
-    cmd.extend(["-package", "zsp_parser.ast", "-o", "../ext"])
+    cmd.extend(["-package", "zuspec.fe.pss.ast", "-o", "../ext"])
 
     result = subprocess.run(
         cmd, 

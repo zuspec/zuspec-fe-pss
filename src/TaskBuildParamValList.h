@@ -19,6 +19,7 @@
  *     Author: 
  */
 #pragma once
+#include <set>
 #include "dmgr/IDebugMgr.h"
 #include "zsp/ast/impl/VisitorBase.h"
 #include "zsp/ast/ISymbolScope.h"
@@ -41,6 +42,8 @@ public:
         ast::ITemplateParamValueList    *pvals);
 
     virtual void visitDataTypeEnum(ast::IDataTypeEnum *i) override;
+
+    virtual void visitDataTypeRef(ast::IDataTypeRef *i) override;
 
     virtual void visitDataTypeUserDefined(ast::IDataTypeUserDefined *i) override;
 
@@ -70,6 +73,8 @@ private:
     ast::ITemplateGenericTypeParamDecl  *m_ptype_generic_type;
     ast::ITemplateCategoryTypeParamDecl *m_ptype_category_type;
     ast::ITemplateValueParamDecl        *m_ptype_value;
+    // Track visited types to prevent infinite recursion
+    std::set<ast::IScopeChild *>        m_visited;
 
 
 };

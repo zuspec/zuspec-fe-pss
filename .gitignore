@@ -43,13 +43,13 @@ python/zuspec_parser/zsp_ast_decl.pxd
 python/ast.cpp
 python/ast.h
 python/ast.pyx
+python/ast.pyi
 python/ast_api.h
-python/zsp_parser/ast.pxd
-python/zsp_parser/ast.pyi
-python/zsp_parser/ast_decl.pxd
-python/zsp_parser/zsp_ast.pxd
-python/zsp_parser/zsp_ast_decl.pxd
-python/zsp_parser/*.so*
+python/ast_ext.pyx
+python/zuspec/fe/pss/ast.pxd
+python/zuspec/fe/pss/ast.pyi
+python/zuspec/fe/pss/ast_decl.pxd
+python/zuspec/fe/pss/*.so*
 python/core.cpp
 python/PyBaseVisitor.*
 

@@ -8,11 +8,46 @@ on:
 
 jobs:
   linux:
-    uses: zuspec/zuspec-release/.github/workflows/zuspec-pybuild.yml@main
-    with:
-      version_dir: 'python/zsp_parser'
-    secrets:
-      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        spec: ['cp312-cp312']
+        image: [manylinux2014_x86_64, manylinux_2_28_x86_64, manylinux_2_34_x86_64]
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+    - name: Update Version
+      shell: bash
+      run: |
+        tag=$(git tag -l --contains HEAD)
+        echo "tag: ${tag}"
+        if test -z ${tag}; then
+            echo "Configuring a candidate release"
+            sed -i -e 's/SUFFIX=".*"/SUFFIX=".${{ github.run_id }}rc0"/g' \
+              python/zuspec/fe/pss/__version__.py
+        else
+            echo "Configuring a full release"
+        fi
+    - name: Build packages
+      env:
+        IVPM_PYTHON: /opt/python/${{ matrix.spec }}/bin/python
+        BUILD_NUM: ${{ github.run_id }}
+      run: >
+        docker run --rm
+        --volume "$(pwd):/io"
+        --env IVPM_PYTHON
+        --env BUILD_NUM
+        --workdir /io
+        quay.io/pypa/${{ matrix.image }}
+        /io/scripts/build_linux.sh
+    - name: Publish to PyPi
+      if: ${{ startsWith(github.ref, 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v') }}
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      run: |
+        python3 -m pip install -U twine packaging
+        python3 -m twine upload wheelhouse/*.whl
 
 #   ci-linux-docs:
 #     runs-on: ubuntu-latest

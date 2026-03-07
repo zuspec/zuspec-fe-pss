@@ -58,6 +58,12 @@ void TaskApplyTypeExtensions::visitExtendEnum(ast::IExtendEnum *i) {
     ast::ISymbolRefPath *target_p = TaskResolveRef(&ctxt).resolve(i->getTarget());
 
     if (!target_p) {
+        IMarkerUP marker(m_factory->mkMarker(
+            "cannot extend unknown enum '" + 
+            i->getTarget()->getElems().at(0)->getId()->getId() + "'",
+            MarkerSeverityE::Error,
+            i->getTarget()->getElems().at(0)->getId()->getLocation()));
+        m_marker_l->marker(marker.get());
         DEBUG_LEAVE("visitExtendEnum - name resolution failure");
         return;
     }
@@ -92,6 +98,12 @@ void TaskApplyTypeExtensions::visitExtendType(ast::IExtendType *i) {
     ast::ISymbolRefPath *target_p = TaskResolveRef(&ctxt).resolve(i->getTarget());
 
     if (!target_p) {
+        IMarkerUP marker(m_factory->mkMarker(
+            "cannot extend unknown type '" + 
+            i->getTarget()->getElems().at(0)->getId()->getId() + "'",
+            MarkerSeverityE::Error,
+            i->getTarget()->getElems().at(0)->getId()->getLocation()));
+        m_marker_l->marker(marker.get());
         DEBUG_LEAVE("visitExtendType - resolution failure");
         return;
     }

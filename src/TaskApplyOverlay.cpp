@@ -134,7 +134,7 @@ void TaskApplyOverlay::visitTypeScope(ast::ITypeScope *i) {
                     plist->getSymtab().insert({(*it)->getName()->getId(), id});
                 } else {
                     // TODO: Find a proper way to report
-                    fprintf(stdout, "Error: duplicate parameter name\n");
+                    DEBUG_ERROR("duplicate parameter name");
                 }
             }
         } else {

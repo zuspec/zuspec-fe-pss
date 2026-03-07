@@ -1,6 +1,6 @@
 
 package:
-  name: pssparser
+  name: zuspec-fe-pss
   version: 0.0.1
 
   setup-deps:
@@ -10,14 +10,12 @@ package:
   dep-sets:
   - name: default-dev
     deps: 
+    - name: zuspec-dataclasses
+      url: https://github.com/zuspec/zuspec-dataclasses.git
     - name: antlr4-tools.jar
       url: https://www.antlr.org/download/antlr-4.13.2-complete.jar
-        #      url: https://www.antlr.org/download/antlr-4.8-complete.jar
-#      url: https://www.antlr.org/download/antlr-4.11.1-complete.jar
     - name: antlr4-cpp-runtime
       url: https://www.antlr.org/download/antlr4-cpp-runtime-4.13.2-source.zip
-        #      url: https://www.antlr.org/download/antlr4-cpp-runtime-4.8-source.zip
-#      url: https://www.antlr.org/download/antlr4-cpp-runtime-4.11.1-source.zip
     - name: gtest
       url: https://github.com/google/googletest/archive/refs/tags/release-1.12.0.tar.gz
     - name: pyastbuilder
@@ -73,11 +71,9 @@ package:
     - name: pyastbuilder
       url: https://github.com/mballance/pyastbuilder.git
     - name: antlr4-tools.jar
-      url: https://www.antlr.org/download/antlr-4.8-complete.jar
-      # url: https://www.antlr.org/download/antlr-4.11.1-complete.jar
+      url: https://www.antlr.org/download/antlr-4.13.2-complete.jar
     - name: antlr4-cpp-runtime
-      url: https://www.antlr.org/download/antlr4-cpp-runtime-4.8-source.zip
-      # url: https://www.antlr.org/download/antlr4-cpp-runtime-4.11.1-source.zip
+      url: https://www.antlr.org/download/antlr4-cpp-runtime-4.13.2-source.zip
     - name: debug-mgr
-      url: https://github.com/mballance/debug-mgr.git
+      src: pypi
 

@@ -102,6 +102,42 @@ ast::IGlobalScope *BuiltinsFactory::build() {
     list->getChildren().push_back(ast::IScopeChildUP(push_back));
     m_builtins->getChildren().push_back(ast::IScopeChildUP(list));
 
+    /****************************************************************
+     * set - PSS 3.0
+     ****************************************************************/
+    ast::IStruct *set = m_ast_f->mkStruct(
+        m_ast_f->mkExprId("set", false),
+        0,
+        ast::StructKind::Struct);
+    params = m_ast_f->mkTemplateParamDeclList();
+    params->getParams().push_back(ast::ITemplateParamDeclUP(
+        m_ast_f->mkTemplateGenericTypeParamDecl(
+            m_ast_f->mkExprId("T", false),
+            0)));
+    set->setParams(params);
+    set->setParent(m_builtins.get());
+    m_builtins->getChildren().push_back(ast::IScopeChildUP(set));
+
+    /****************************************************************
+     * map - PSS 3.0
+     ****************************************************************/
+    ast::IStruct *map = m_ast_f->mkStruct(
+        m_ast_f->mkExprId("map", false),
+        0,
+        ast::StructKind::Struct);
+    params = m_ast_f->mkTemplateParamDeclList();
+    params->getParams().push_back(ast::ITemplateParamDeclUP(
+        m_ast_f->mkTemplateGenericTypeParamDecl(
+            m_ast_f->mkExprId("K", false),
+            0)));
+    params->getParams().push_back(ast::ITemplateParamDeclUP(
+        m_ast_f->mkTemplateGenericTypeParamDecl(
+            m_ast_f->mkExprId("V", false),
+            0)));
+    map->setParams(params);
+    map->setParent(m_builtins.get());
+    m_builtins->getChildren().push_back(ast::IScopeChildUP(map));
+
     return m_builtins.release();
 }
 
