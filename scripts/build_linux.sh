@@ -10,22 +10,29 @@ ${IVPM_PYTHON} -m pip install -U ivpm cython setuptools
 
 # Run ivpm update.  Use --anonymous so ivpm clones GitHub repos via HTTPS
 # rather than SSH (SSH keys are not available in CI containers).
-# The default dep-set is 'default-dev' (per ivpm logic when no --dep-set is
-# given and a default-dev dep-set exists), which is what we want — it pulls
-# in ciostream, pyastbuilder, and zuspec-dataclasses needed for the C++ build.
-${IVPM_PYTHON} -m ivpm update --anonymous || true
+# Use --dep-set default to avoid the 'default-dev' dep-set which pulls in
+# Sphinx/cairosvg and other doc deps whose pre-release wheels require Rust
+# (e.g. tiktoken -> setuptools_rust) which is unavailable in manylinux.
+${IVPM_PYTHON} -m ivpm update --anonymous --dep-set default || true
 
-# The antlr4-cpp-runtime zip contains runtime/_deps/googletest-src/... paths
-# that fail to extract in some manylinux containers.  Re-extract manually,
-# skipping those unneeded cmake-fetched test deps.
-if [ ! -f packages/antlr4-cpp-runtime/CMakeLists.txt ]; then
-    echo "antlr4-cpp-runtime CMakeLists.txt missing -- re-extracting zip"
-    ANTLR4_URL=https://www.antlr.org/download/antlr4-cpp-runtime-4.13.2-source.zip
-    ANTLR4_ZIP=/tmp/antlr4-cpp-runtime.zip
+# The antlr4-cpp-runtime zip from antlr.org contains cmake FetchContent
+# artifacts under runtime/_deps/googletest-src/... with deeply nested paths
+# that cause Python's ZipFile.extractall() to fail on some manylinux
+# containers (ENAMETOOLONG / ENOENT).  When that happens the extraction stops
+# mid-stream: CMakeLists.txt is written early so it exists, but later files
+# like runtime/src/support/Declarations.h are never extracted.
+#
+# Always re-extract the zip manually, skipping runtime/_deps/ entries, so we
+# get a complete, known-good tree regardless of what ivpm's extractor did.
+echo "antlr4-cpp-runtime: ensuring clean extraction (skipping runtime/_deps)"
+ANTLR4_URL=https://www.antlr.org/download/antlr4-cpp-runtime-4.13.2-source.zip
+ANTLR4_ZIP=/tmp/antlr4-cpp-runtime.zip
+if [ ! -f "${ANTLR4_ZIP}" ]; then
     curl -L -o "${ANTLR4_ZIP}" "${ANTLR4_URL}"
-    rm -rf packages/antlr4-cpp-runtime
-    mkdir -p packages/antlr4-cpp-runtime
-    ${IVPM_PYTHON} -c "
+fi
+rm -rf packages/antlr4-cpp-runtime
+mkdir -p packages/antlr4-cpp-runtime
+${IVPM_PYTHON} -c "
 from zipfile import ZipFile
 import os
 with ZipFile('${ANTLR4_ZIP}', 'r') as z:
@@ -33,7 +40,6 @@ with ZipFile('${ANTLR4_ZIP}', 'r') as z:
         if not info.filename.startswith('runtime/_deps'):
             z.extract(info, 'packages/antlr4-cpp-runtime')
 "
-fi
 
 PYTHON=./packages/python/bin/python
 
