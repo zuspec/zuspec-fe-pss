@@ -8,10 +8,12 @@ echo "BUILD_NUM=${BUILD_NUM}" >> python/zuspec/fe/pss/__build_num__.py
 
 ${IVPM_PYTHON} -m pip install -U ivpm cython setuptools
 
-# Run ivpm update with the 'default' dep-set only (no -a / default-dev).
-# default-dev adds Sphinx/cairosvg/etc which pull in pre-release packages that
-# need Rust to compile from source and are not needed for wheel builds.
-${IVPM_PYTHON} -m ivpm update || true
+# Run ivpm update.  Use --anonymous so ivpm clones GitHub repos via HTTPS
+# rather than SSH (SSH keys are not available in CI containers).
+# The default dep-set is 'default-dev' (per ivpm logic when no --dep-set is
+# given and a default-dev dep-set exists), which is what we want — it pulls
+# in ciostream, pyastbuilder, and zuspec-dataclasses needed for the C++ build.
+${IVPM_PYTHON} -m ivpm update --anonymous || true
 
 # The antlr4-cpp-runtime zip contains runtime/_deps/googletest-src/... paths
 # that fail to extract in some manylinux containers.  Re-extract manually,
@@ -34,6 +36,14 @@ with ZipFile('${ANTLR4_ZIP}', 'r') as z:
 fi
 
 PYTHON=./packages/python/bin/python
+
+# The manylinux Python may not have pip in its system site-packages, so the
+# venv ivpm creates might also lack pip.  Bootstrap it if needed.
+if ! ${PYTHON} -m pip --version > /dev/null 2>&1; then
+    echo "pip not found in packages/python -- bootstrapping with ensurepip"
+    ${PYTHON} -m ensurepip --upgrade
+fi
+
 ${PYTHON} -m pip install twine auditwheel ninja wheel cython
 ${PYTHON} -m pip install debug-mgr
 
