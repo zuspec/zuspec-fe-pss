@@ -341,6 +341,8 @@ private:
 
 	ast::IExprDomainOpenRangeList *mkDomainOpenRangeList(PSSParser::Domain_open_range_listContext *ctx);
 
+	ast::IExprOpenRangeList *mkOpenRangeList(PSSParser::Open_range_listContext *ctx);
+
     ast::IScopeChild *mkExecStmt(PSSParser::Procedural_stmtContext *ctx);
 
     void addExecStmt(PSSParser::Procedural_stmtContext *ctx);

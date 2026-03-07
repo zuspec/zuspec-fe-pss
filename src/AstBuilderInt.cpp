@@ -22,6 +22,9 @@
 #include "zsp/ast/IAction.h"
 #include "zsp/ast/IComponent.h"
 #include "zsp/ast/IExprId.h"
+#include "zsp/ast/IExprIn.h"
+#include "zsp/ast/IExprOpenRangeList.h"
+#include "zsp/ast/IExprOpenRangeValue.h"
 #include "zsp/ast/INamedScope.h"
 #include "zsp/ast/IPackageImportStmt.h"
 #include "zsp/ast/Location.h"
@@ -2073,6 +2076,11 @@ antlrcpp::Any AstBuilderInt::visitUnique_constraint_item(PSSParser::Unique_const
 		c->getList().push_back(ast::IExprHierarchicalIdUP(hid));
 	}
 
+	if (m_constraint_s.size() > 0) {
+		c->setIndex(m_constraint_s.back()->getConstraints().size());
+		m_constraint_s.back()->getConstraints().push_back(ast::IConstraintStmtUP(c));
+	}
+
 	DEBUG_LEAVE("visitUnique_constraint_item");
 	return 0;
 }
@@ -2167,7 +2175,11 @@ antlrcpp::Any AstBuilderInt::visitExpression(PSSParser::ExpressionContext *ctx) 
 	} else if (ctx->lhs) {
 		// It's either an 'in' or a conditional 
 		if (ctx->in_expression()) {
-			DEBUG("TODO: in_expression");
+			// Build ExprIn: lhs in [open_range_list]
+			ast::IExpr *lhs = mkExpr(ctx->lhs);
+			PSSParser::In_expressionContext *in_ctx = ctx->in_expression();
+			ast::IExprOpenRangeList *rhs = mkOpenRangeList(in_ctx->open_range_list());
+			m_expr = m_factory->mkExprIn(lhs, rhs);
 		} else {
 			// Conditional
 			ast::IExpr *cond = mkExpr(ctx->lhs);
@@ -2989,6 +3001,24 @@ ast::IExprDomainOpenRangeList *AstBuilderInt::mkDomainOpenRangeList(PSSParser::D
 		ret->getValues().push_back(ast::IExprDomainOpenRangeValueUP(value));
 	}
 	DEBUG_LEAVE("mkDomainOpenRangeList");
+	return ret;
+}
+
+ast::IExprOpenRangeList *AstBuilderInt::mkOpenRangeList(PSSParser::Open_range_listContext *ctx) {
+	DEBUG_ENTER("mkOpenRangeList");
+	ast::IExprOpenRangeList *ret = m_factory->mkExprOpenRangeList();
+
+	if (ctx) {
+		std::vector<PSSParser::Open_range_valueContext *> items = ctx->open_range_value();
+		for (auto *it : items) {
+			ast::IExpr *lhs = it->lhs ? mkExpr(it->lhs) : nullptr;
+			ast::IExpr *rhs = it->rhs ? mkExpr(it->rhs) : nullptr;
+			ast::IExprOpenRangeValue *value = m_factory->mkExprOpenRangeValue(lhs, rhs);
+			ret->getValues().push_back(ast::IExprOpenRangeValueUP(value));
+		}
+	}
+
+	DEBUG_LEAVE("mkOpenRangeList");
 	return ret;
 }
 

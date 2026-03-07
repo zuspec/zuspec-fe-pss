@@ -535,10 +535,10 @@ class TestAstToIr(unittest.TestCase):
         self.assertEqual(len(ctx.errors), 0)
         
         # Should have action in type map
-        self.assertIn("MyAction", ctx.type_map)
+        self.assertIn("pss_top::MyAction", ctx.type_map)
         
         # Get action
-        action = ctx.type_map["MyAction"]
+        action = ctx.type_map["pss_top::MyAction"]
         self.assertIsInstance(action, ir.DataTypeClass)
         self.assertEqual(action.name, "MyAction")
         
@@ -565,12 +565,12 @@ class TestAstToIr(unittest.TestCase):
         self.assertEqual(len(ctx.errors), 0)
         
         # Should have both actions
-        self.assertIn("BaseAction", ctx.type_map)
-        self.assertIn("DerivedAction", ctx.type_map)
+        self.assertIn("pss_top::BaseAction", ctx.type_map)
+        self.assertIn("pss_top::DerivedAction", ctx.type_map)
         
         # Check inheritance
-        base = ctx.type_map["BaseAction"]
-        derived = ctx.type_map["DerivedAction"]
+        base = ctx.type_map["pss_top::BaseAction"]
+        derived = ctx.type_map["pss_top::DerivedAction"]
         
         self.assertIsNone(base.super)
         self.assertIsNotNone(derived.super)
@@ -652,12 +652,12 @@ class TestAstToIr(unittest.TestCase):
         
         # Should have all three types
         self.assertIn("Config", ctx.type_map)
-        self.assertIn("Process", ctx.type_map)
+        self.assertIn("System::Process", ctx.type_map)
         self.assertIn("System", ctx.type_map)
         
         # Check types
         self.assertIsInstance(ctx.type_map["Config"], ir.DataTypeStruct)
-        self.assertIsInstance(ctx.type_map["Process"], ir.DataTypeClass)
+        self.assertIsInstance(ctx.type_map["System::Process"], ir.DataTypeClass)
         self.assertIsInstance(ctx.type_map["System"], ir.DataTypeComponent)
         
         # System should have 2 fields
