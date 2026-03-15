@@ -75,7 +75,7 @@ if isSrcBuild:
     setup_requires.append('pyastbuilder')
 
 setup_args = dict(
-    name="zuspec-parser",
+    name="zuspec-fe-pss",
     packages=find_namespace_packages(where='python'),
     package_dir={'' : 'python' },
     package_data={
