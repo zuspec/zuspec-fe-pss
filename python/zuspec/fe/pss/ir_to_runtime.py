@@ -161,6 +161,10 @@ class IrToRuntimeBuilder:
             # Also expose as attribute on the parent component class
             setattr(self.python_classes[parent_name], dt.name, cls)
 
+        # Resolve action_type_cls on all ActivityAnonTraversal nodes now that
+        # all classes are built.
+        self._resolve_activity_action_types()
+
         return ClassRegistry(self.python_classes)
 
     # ------------------------------------------------------------------
@@ -174,19 +178,30 @@ class IrToRuntimeBuilder:
         value container.  ``cls._zdc_struct`` is attached so that
         ``randomize()`` can find the IR metadata (rand fields, domains,
         constraint functions) without any extra decoration.
+
+        When the struct inherits from a base (``dt.super`` is set), Python
+        class inheritance is used so that base-class attributes are accessible
+        on child instances, and a merged ``_zdc_struct`` is built so the
+        constraint solver sees *all* fields (inherited + own).
         """
         annotations: Dict[str, Any] = {}
         ns: Dict[str, Any] = {}
 
+        # Resolve base Python class and merged IR for inheritance
+        base_py_cls, merged_dt = self._resolve_super(dt)
+        base_classes = (base_py_cls,) if base_py_cls is not None else ()
+
+        # Only add this struct's *own* fields to the dataclass body —
+        # inherited fields come via Python class inheritance.
         for f in dt.fields:
             py_type, default = self._field_to_plain(f)
             annotations[f.name] = py_type
             ns[f.name] = default
 
         ns['__annotations__'] = annotations
-        cls = type(name, (), ns)
+        cls = type(name, base_classes, ns)
         cls = _stdlib_dc.dataclass(cls)
-        cls._zdc_struct = dt
+        cls._zdc_struct = merged_dt
         return cls
 
     # ------------------------------------------------------------------
@@ -211,6 +226,11 @@ class IrToRuntimeBuilder:
         annotations: Dict[str, Any] = {}
         defaults: Dict[str, Any] = {}
 
+        # Resolve base Python class for component inheritance
+        base_py_cls, merged_dt = self._resolve_super(dt)
+        comp_base = base_py_cls if base_py_cls is not None else zdc.Component
+
+        # Only add this component's *own* fields to the class body
         for f in dt.fields:
             py_type, default = self._field_to_zdc(f)
             annotations[f.name] = py_type
@@ -218,12 +238,14 @@ class IrToRuntimeBuilder:
 
         ns: Dict[str, Any] = {'__annotations__': annotations, **defaults}
 
-        init_down = self._get_function(dt, 'init_down')
+        init_down = self._get_function(merged_dt, 'init_down')
         if init_down:
             ns['__post_init__'] = self._build_post_init(init_down)
 
-        cls = type(name, (zdc.Component,), ns)
-        return zdc.dataclass(cls)
+        cls = type(name, (comp_base,), ns)
+        built = zdc.dataclass(cls)
+        built._zdc_struct = merged_dt
+        return built
 
     # ------------------------------------------------------------------
     # Action construction
@@ -231,11 +253,18 @@ class IrToRuntimeBuilder:
 
     def _build_action(self, dt: zdc_ir.DataTypeClass, parent_comp_name: str):
         comp_type = self.python_classes[parent_comp_name]
-        ActionBase = zdc.Action[comp_type]
+
+        # Resolve base action class for action inheritance
+        base_py_cls, merged_dt = self._resolve_super(dt)
+        if base_py_cls is not None:
+            ActionBase = base_py_cls
+        else:
+            ActionBase = zdc.Action[comp_type]
 
         annotations: Dict[str, Any] = {}
         defaults: Dict[str, Any] = {}
 
+        # Only add this action's *own* fields to the class body
         for f in dt.fields:
             py_type, default = self._field_to_zdc(f)
             annotations[f.name] = py_type
@@ -243,24 +272,29 @@ class IrToRuntimeBuilder:
 
         ns: Dict[str, Any] = {'__annotations__': annotations, **defaults}
 
-        body_fn = self._get_function(dt, 'body')
+        body_fn = self._get_function(merged_dt, 'body')
         if body_fn:
             ns['body'] = self._build_body_fn(body_fn)
 
-        pre_solve_fn = self._get_function(dt, 'pre_solve')
+        pre_solve_fn = self._get_function(merged_dt, 'pre_solve')
         if pre_solve_fn:
             ns['pre_solve'] = self._build_sync_fn(pre_solve_fn)
 
-        post_solve_fn = self._get_function(dt, 'post_solve')
+        post_solve_fn = self._get_function(merged_dt, 'post_solve')
         if post_solve_fn:
             ns['post_solve'] = self._build_sync_fn(post_solve_fn)
 
-        return pytypes.new_class(
+        cls = pytypes.new_class(
             dt.name,
             (ActionBase,),
             {},
             lambda d: d.update(ns),
         )
+        cls = _stdlib_dc.dataclass(cls, kw_only=True)
+        cls._zdc_struct = merged_dt
+        if dt.activity_ir is not None:
+            cls.__activity__ = dt.activity_ir
+        return cls
 
     # ------------------------------------------------------------------
     # Callable builders (body / post_init / pre_solve / post_solve)
@@ -346,8 +380,14 @@ class IrToRuntimeBuilder:
             return str, zdc.field()
         elif isinstance(dt, zdc_ir.DataTypeRef):
             ref_cls = self.python_classes.get(dt.ref_name)
+            if ref_cls is None:
+                # ref_name may be a short name; search by suffix
+                for qname, py_cls in self.python_classes.items():
+                    if qname.split('::')[-1] == dt.ref_name:
+                        ref_cls = py_cls
+                        break
             if ref_cls is not None:
-                return ref_cls, zdc.inst()
+                return ref_cls, zdc.field(default=None)
             return int, zdc.field()
         elif isinstance(dt, zdc_ir.DataTypeComponent):
             # Inline component sub-type — look up the built Python class by name
@@ -361,10 +401,97 @@ class IrToRuntimeBuilder:
     # Utilities
     # ------------------------------------------------------------------
 
+    def _resolve_activity_action_types(self) -> None:
+        """Walk all __activity__ IR trees and populate action_type_cls on
+        ActivityAnonTraversal nodes so the runner can find the Python class."""
+        from zuspec.dataclasses.ir.activity import ActivityAnonTraversal as _AAT
+
+        def _walk(node):
+            if isinstance(node, _AAT) and node.action_type_cls is None:
+                # Try exact match first, then search by short name
+                cls = self.python_classes.get(node.action_type)
+                if cls is None:
+                    for qname, py_cls in self.python_classes.items():
+                        # qname may be 'Comp::ActionName' — match by short name
+                        if qname.split('::')[-1] == node.action_type:
+                            cls = py_cls
+                            break
+                if cls is not None:
+                    node.action_type_cls = cls
+            # Recurse into child stmt lists
+            for attr in ('stmts', 'body', 'if_body', 'else_body', 'branches'):
+                for child in getattr(node, attr, []) or []:
+                    if hasattr(child, 'stmts') or hasattr(child, 'body'):
+                        _walk(child)
+                    elif isinstance(child, _AAT):
+                        _walk(child)
+            if hasattr(node, 'branches'):
+                from zuspec.dataclasses.ir.activity import SelectBranch as _SB
+                for b in (node.branches or []):
+                    if isinstance(b, _SB):
+                        for s in b.body or []:
+                            _walk(s)
+
+        for cls in list(self.python_classes.values()):
+            activity_ir = getattr(cls, '__activity__', None)
+            if activity_ir is not None:
+                for stmt in getattr(activity_ir, 'stmts', []) or []:
+                    _walk(stmt)
+
     @staticmethod
     def _get_function(dt: zdc_ir.DataTypeStruct,
                       name: str) -> Optional[zdc_ir.Function]:
         return next((f for f in dt.functions if f.name == name), None)
+
+    def _resolve_super(
+        self, dt: zdc_ir.DataTypeStruct
+    ) -> Tuple[Optional[type], zdc_ir.DataTypeStruct]:
+        """Walk the super chain and return (base_py_cls, merged_dt).
+
+        *base_py_cls* is the already-built Python class for the direct super
+        type (or ``None`` if there is no super).  *merged_dt* is a
+        ``DataTypeStruct`` whose ``fields`` and ``functions`` lists are the
+        full flattened inheritance chain (base first), so the constraint
+        solver sees every inherited field and constraint function.
+        """
+        if dt.super is None:
+            return None, dt
+
+        if isinstance(dt.super, zdc_ir.DataTypeRef):
+            super_name = dt.super.ref_name
+        else:
+            super_name = getattr(dt.super, 'name', None)
+
+        base_py_cls = self._lookup_class(super_name)
+
+        # Build merged IR by walking the full chain (base-first) via the
+        # already-merged _zdc_struct on the base Python class.
+        if base_py_cls is not None and hasattr(base_py_cls, '_zdc_struct'):
+            base_merged: zdc_ir.DataTypeStruct = base_py_cls._zdc_struct
+            merged = zdc_ir.DataTypeStruct.__new__(zdc_ir.DataTypeStruct)
+            # Copy scalar attributes from the child IR
+            merged.__dict__.update(dt.__dict__)
+            # Prepend base fields/functions so child overrides come last
+            merged.fields = list(base_merged.fields) + list(dt.fields)
+            merged.functions = list(base_merged.functions) + list(dt.functions)
+        else:
+            merged = dt
+
+        return base_py_cls, merged
+
+    def _lookup_class(self, name: Optional[str]) -> Optional[type]:
+        """Look up a Python class by name, trying exact then short-name match."""
+        if not name:
+            return None
+        cls = self.python_classes.get(name)
+        if cls is not None:
+            return cls
+        # For qualified names like 'C::Base', the short name 'Base' may have
+        # been stored as 'C::Base' — search by suffix.
+        for qname, py_cls in self.python_classes.items():
+            if qname == name or qname.split('::')[-1] == name:
+                return py_cls
+        return None
 
     def _topo_sort(
         self,
@@ -382,6 +509,13 @@ class IrToRuntimeBuilder:
             dt = name_to_dt.get(name)
             if dt is None:
                 return
+            # Visit super type before this type
+            if dt.super is not None:
+                super_name = (dt.super.ref_name
+                              if isinstance(dt.super, zdc_ir.DataTypeRef)
+                              else getattr(dt.super, 'name', None))
+                if super_name:
+                    visit(super_name)
             for f in dt.fields:
                 if isinstance(f.datatype, zdc_ir.DataTypeRef):
                     visit(f.datatype.ref_name)
