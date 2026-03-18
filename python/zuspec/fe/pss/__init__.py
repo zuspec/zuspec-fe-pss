@@ -5,6 +5,23 @@ from .ast_to_ir import AstToIrTranslator, AstToIrContext
 from .ir_to_runtime import IrToRuntimeBuilder, ClassRegistry
 
 
+class PssTranslationError(Exception):
+    """Raised when PSS source cannot be fully translated to IR.
+
+    Unlike :exc:`ParseException` (which covers syntax/resolution errors caught
+    by the parser/linker), this exception signals failures that occur during
+    the AST→IR translation pass — for example, field types that the translator
+    does not yet handle.
+
+    ``errors`` is a list of human-readable error strings, one per problem.
+    """
+
+    def __init__(self, errors: list[str]) -> None:
+        self.errors = list(errors)
+        joined = "\n  ".join(errors)
+        super().__init__(f"PSS IR translation failed with {len(errors)} error(s):\n  {joined}")
+
+
 def load_pss(pss_text: str) -> ClassRegistry:
     """Parse PSS source text and return a registry of randomizable Python classes.
 
@@ -30,6 +47,8 @@ def load_pss(pss_text: str) -> ClassRegistry:
     parser.parses([('inline.pss', pss_text)])
     root = parser.link()
     ctx = AstToIrTranslator().translate(root)
+    if ctx.errors:
+        raise PssTranslationError(ctx.errors)
     return IrToRuntimeBuilder(ctx).build()
 
 def get_deps():
