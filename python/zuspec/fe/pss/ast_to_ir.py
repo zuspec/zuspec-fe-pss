@@ -858,14 +858,18 @@ class AstToIrTranslator:
         # ConstraintStmtForeach is a subclass of ConstraintScope, so it MUST be
         # checked before the generic ConstraintScope branch.
         elif isinstance(stmt, pss_ast.ConstraintStmtForeach):
-            it_node = stmt.getIt()
-            if it_node is None:
+            it_node = stmt.getIt()   # element-style: foreach (e : data)
+            idx_node = stmt.getIdx() # index-style:   foreach (data[i])
+            if it_node is not None:
+                var_name_obj = it_node.getName()
+            elif idx_node is not None:
+                var_name_obj = idx_node.getName()
+            else:
                 return
-            it_name_obj = it_node.getName()
-            if it_name_obj is None:
+            if var_name_obj is None:
                 return
-            iter_var_name = (it_name_obj.getId()
-                             if hasattr(it_name_obj, 'getId') else str(it_name_obj))
+            iter_var_name = (var_name_obj.getId()
+                             if hasattr(var_name_obj, 'getId') else str(var_name_obj))
 
             collection_expr_node = stmt.getExpr()
             if collection_expr_node is None:
@@ -953,14 +957,20 @@ class AstToIrTranslator:
                 continue
 
             if isinstance(stmt, pss_ast.ConstraintStmtForeach):
-                # foreach has special context management (iterator variable)
+                # foreach has special context management (iterator variable).
+                # Element-style: foreach (e : data)  → getIt() returns the var
+                # Index-style:   foreach (data[i])   → getIdx() returns the var
                 it_node = stmt.getIt()
-                if it_node is None:
+                idx_node = stmt.getIdx()
+                if it_node is not None:
+                    var_name_obj = it_node.getName()
+                elif idx_node is not None:
+                    var_name_obj = idx_node.getName()
+                else:
                     continue
-                it_name_obj = it_node.getName()
-                if it_name_obj is None:
+                if var_name_obj is None:
                     continue
-                iter_var_name = it_name_obj.getId() if hasattr(it_name_obj, 'getId') else str(it_name_obj)
+                iter_var_name = var_name_obj.getId() if hasattr(var_name_obj, 'getId') else str(var_name_obj)
 
                 collection_expr_node = stmt.getExpr()
                 if collection_expr_node is None:
