@@ -1,5 +1,6 @@
 
 import os
+from typing import List, Union
 from .parser import Parser, ParseException
 from .ast_to_ir import AstToIrTranslator, AstToIrContext
 from .ir_to_runtime import IrToRuntimeBuilder, ClassRegistry
@@ -45,6 +46,31 @@ def load_pss(pss_text: str) -> ClassRegistry:
     """
     parser = Parser()
     parser.parses([('inline.pss', pss_text)])
+    root = parser.link()
+    ctx = AstToIrTranslator().translate(root)
+    if ctx.errors:
+        raise PssTranslationError(ctx.errors)
+    return IrToRuntimeBuilder(ctx).build()
+
+
+def load_pss_files(paths: List[Union[str, os.PathLike]]) -> ClassRegistry:
+    """Parse one or more ``.pss`` files and return a registry of Python classes.
+
+    Files are parsed together so they can reference each other's types.
+    Use this when your PSS model is split across multiple source files.
+
+    Example::
+
+        from zuspec.fe.pss import load_pss_files
+        from zuspec.dataclasses import randomize
+
+        ns = load_pss_files(['bus.pss', 'cpu.pss'])
+        cmd = ns.WriteCmd()
+        randomize(cmd, seed=1)
+    """
+    str_paths = [str(p) for p in paths]
+    parser = Parser()
+    parser.parse(str_paths)
     root = parser.link()
     ctx = AstToIrTranslator().translate(root)
     if ctx.errors:

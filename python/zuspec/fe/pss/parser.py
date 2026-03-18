@@ -31,7 +31,7 @@ class Parser(object):
 
         file_id = 0
         if len(self._files) == 0:
-            stdlib = self.ast_f.mkGlobalScope(len(self._files()))
+            stdlib = self.ast_f.mkGlobalScope(len(self._files))
             self.parser_f.loadStandardLibrary(builder, stdlib)
             self._files.append(stdlib)
 
