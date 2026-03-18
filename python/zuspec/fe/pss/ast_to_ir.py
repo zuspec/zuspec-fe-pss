@@ -489,11 +489,231 @@ class AstToIrTranslator:
                 constraint_func = self._translate_constraint_block(ctx, child, action_ir)
                 if constraint_func:
                     action_ir.functions.append(constraint_func)
+            elif isinstance(child, pss_ast.ActivityDecl):
+                action_ir.activity_ir = self._translate_activity_body(ctx, child)
                      
         # Pop scope
         ctx.pop_scope()
         
         return action_ir
+
+    # ------------------------------------------------------------------
+    # Activity body translation
+    # ------------------------------------------------------------------
+
+    def _translate_activity_body(
+        self,
+        ctx: 'AstToIrContext',
+        activity_decl: 'pss_ast.ActivityDecl',
+    ) -> 'ir.ActivitySequenceBlock':
+        """Translate a PSS ActivityDecl to an IR ActivitySequenceBlock."""
+        stmts = self._translate_activity_stmts(ctx, activity_decl.children())
+        return ir.ActivitySequenceBlock(stmts=stmts)
+
+    def _translate_activity_stmts(
+        self,
+        ctx: 'AstToIrContext',
+        children,
+    ) -> List['ir.ActivityStmt']:
+        """Translate an iterable of PSS activity child nodes to IR ActivityStmt list."""
+        result: List[ir.ActivityStmt] = []
+        for child in children:
+            if child is None:
+                continue
+            stmt = self._translate_activity_stmt(ctx, child)
+            if stmt is not None:
+                result.append(stmt)
+        return result
+
+    def _translate_activity_stmt(
+        self,
+        ctx: 'AstToIrContext',
+        node,
+    ) -> Optional['ir.ActivityStmt']:
+        """Translate a single PSS activity AST node to an IR ActivityStmt."""
+
+        if isinstance(node, (pss_ast.ActivitySequence, pss_ast.ActivityDecl)):
+            stmts = self._translate_activity_stmts(ctx, node.children())
+            return ir.ActivitySequenceBlock(stmts=stmts)
+
+        if isinstance(node, pss_ast.ActivityParallel):
+            stmts = self._translate_activity_stmts(ctx, node.children())
+            join_spec = self._translate_join_spec(node.getJoin_spec())
+            return ir.ActivityParallel(stmts=stmts, join_spec=join_spec)
+
+        if isinstance(node, pss_ast.ActivitySchedule):
+            stmts = self._translate_activity_stmts(ctx, node.children())
+            return ir.ActivitySchedule(stmts=stmts)
+
+        if isinstance(node, pss_ast.ActivityAtomicBlock):
+            stmts = self._translate_activity_stmts(ctx, node.children())
+            return ir.ActivityAtomic(stmts=stmts)
+
+        if isinstance(node, pss_ast.ActivityActionHandleTraversal):
+            return self._translate_handle_traversal(ctx, node)
+
+        if isinstance(node, pss_ast.ActivityActionTypeTraversal):
+            return self._translate_type_traversal(ctx, node)
+
+        if isinstance(node, pss_ast.ActivitySuper):
+            return ir.ActivitySuper()
+
+        if isinstance(node, pss_ast.ActivityRepeatCount):
+            count_expr = self._translate_expression(ctx, node.getCount())
+            loop_var = node.getLoop_var()
+            index_var = loop_var.getId() if loop_var and hasattr(loop_var, 'getId') else None
+            body_stmts = self._translate_activity_stmts(ctx, _activity_body_children(node.getBody()))
+            return ir.ActivityRepeat(count=count_expr, index_var=index_var, body=body_stmts)
+
+        if isinstance(node, pss_ast.ActivityRepeatWhile):
+            cond_expr = self._translate_expression(ctx, node.getCond())
+            body_stmts = self._translate_activity_stmts(ctx, _activity_body_children(node.getBody()))
+            return ir.ActivityDoWhile(condition=cond_expr, body=body_stmts)
+
+        if isinstance(node, pss_ast.ActivityForeach):
+            it_id = node.getIt_id()
+            iterator = it_id.getId() if it_id else '_item'
+            idx_id = node.getIdx_id()
+            index_var = idx_id.getId() if idx_id else None
+            target_expr = self._translate_expression(ctx, node.getTarget())
+            body_stmts = self._translate_activity_stmts(ctx, _activity_body_children(node.getBody()))
+            return ir.ActivityForeach(
+                iterator=iterator, collection=target_expr,
+                index_var=index_var, body=body_stmts,
+            )
+
+        if isinstance(node, pss_ast.ActivityIfElse):
+            cond_expr = self._translate_expression(ctx, node.getCond())
+            true_s = node.getTrue_s()
+            false_s = node.getFalse_s()
+            if_body: List[ir.ActivityStmt] = []
+            else_body: List[ir.ActivityStmt] = []
+            if true_s:
+                s = self._translate_activity_stmt(ctx, true_s)
+                if s:
+                    if hasattr(s, 'stmts'):
+                        if_body.extend(s.stmts)
+                    else:
+                        if_body.append(s)
+            if false_s:
+                s = self._translate_activity_stmt(ctx, false_s)
+                if s:
+                    if hasattr(s, 'stmts'):
+                        else_body.extend(s.stmts)
+                    else:
+                        else_body.append(s)
+            return ir.ActivityIfElse(condition=cond_expr, if_body=if_body, else_body=else_body)
+
+        if isinstance(node, pss_ast.ActivitySelect):
+            branches: List[ir.SelectBranch] = []
+            for b in node.getBranches():
+                guard = self._translate_expression(ctx, b.getGuard()) if b.getGuard() else None
+                weight = self._translate_expression(ctx, b.getWeight()) if b.getWeight() else None
+                body = b.getBody()
+                body_stmts: List[ir.ActivityStmt] = []
+                if body:
+                    s = self._translate_activity_stmt(ctx, body)
+                    if s:
+                        if hasattr(s, 'stmts'):
+                            body_stmts.extend(s.stmts)
+                        else:
+                            body_stmts.append(s)
+                branches.append(ir.SelectBranch(guard=guard, weight=weight, body=body_stmts))
+            return ir.ActivitySelect(branches=branches)
+
+        if isinstance(node, pss_ast.ActivityReplicate):
+            count_expr = self._translate_expression(ctx, node.getCount())
+            loop_var = node.getLoop_var()
+            index_var = loop_var.getId() if loop_var and hasattr(loop_var, 'getId') else None
+            body_stmts = self._translate_activity_stmts(ctx, _activity_body_children(node.getBody()))
+            return ir.ActivityReplicate(count=count_expr, index_var=index_var, body=body_stmts)
+
+        if isinstance(node, pss_ast.ActivityConstraint):
+            exprs: List[ir.Expr] = []
+            c = node.getConstraint()
+            if c is not None:
+                stmts: List[ir.Stmt] = []
+                self._collect_constraint_stmt(ctx, c, stmts)
+                for s in stmts:
+                    if isinstance(s, ir.StmtExpr):
+                        exprs.append(s.expr)
+            return ir.ActivityConstraint(constraints=exprs)
+
+        if isinstance(node, pss_ast.ActivityBindStmt):
+            # Bind statements are structural; skip for now
+            return None
+
+        if self.debug:
+            self.logger.debug(f"Unhandled activity stmt type: {type(node).__name__}")
+        return None
+
+    def _translate_handle_traversal(
+        self,
+        ctx: 'AstToIrContext',
+        node: 'pss_ast.ActivityActionHandleTraversal',
+    ) -> Optional['ir.ActivityTraversal']:
+        """Extract handle name from ExprRefPathContext and build ActivityTraversal."""
+        target = node.getTarget()
+        hier_id = target.getHier_id()
+        parts: List[str] = []
+        for i in range(hier_id.numElems()):
+            elem = hier_id.getElem(i)
+            if elem:
+                id_obj = elem.getId()
+                if id_obj and hasattr(id_obj, 'getId'):
+                    parts.append(id_obj.getId())
+        handle = '.'.join(parts) if parts else None
+        if handle is None:
+            return None
+        return ir.ActivityTraversal(handle=handle, inline_constraints=[])
+
+    def _translate_type_traversal(
+        self,
+        ctx: 'AstToIrContext',
+        node: 'pss_ast.ActivityActionTypeTraversal',
+    ) -> 'ir.ActivityAnonTraversal':
+        """Extract action type name and optional label; build ActivityAnonTraversal."""
+        target = node.getTarget()
+        type_id = target.getType_id()
+        parts: List[str] = []
+        for i in range(type_id.numElems()):
+            elem = type_id.getElem(i)
+            if elem:
+                id_obj = elem.getId()
+                if hasattr(id_obj, 'getId'):
+                    parts.append(id_obj.getId())
+                elif hasattr(elem, 'getId'):
+                    raw = elem.getId()
+                    if hasattr(raw, 'getId'):
+                        parts.append(raw.getId())
+        action_type = '::'.join(parts) if parts else ''
+
+        label = None
+        label_node = node.getLabel()
+        if label_node:
+            label = label_node.getId() if hasattr(label_node, 'getId') else str(label_node)
+
+        return ir.ActivityAnonTraversal(
+            action_type=action_type,
+            label=label,
+            inline_constraints=[],
+        )
+
+    def _translate_join_spec(self, join_spec) -> Optional['ir.JoinSpec']:
+        """Convert a PSS ActivityJoinSpec to IR JoinSpec."""
+        if join_spec is None:
+            return None
+        if isinstance(join_spec, pss_ast.ActivityJoinSpecBranch):
+            return ir.JoinSpec(kind='branch')
+        if isinstance(join_spec, pss_ast.ActivityJoinSpecFirst):
+            count = self._translate_expression(None, join_spec.getCount()) if hasattr(join_spec, 'getCount') else None
+            return ir.JoinSpec(kind='first', count=count)
+        if isinstance(join_spec, pss_ast.ActivityJoinSpecNone):
+            return ir.JoinSpec(kind='none')
+        if isinstance(join_spec, pss_ast.ActivityJoinSpecSelect):
+            count = self._translate_expression(None, join_spec.getCount()) if hasattr(join_spec, 'getCount') else None
+            return ir.JoinSpec(kind='select', count=count)
+        return ir.JoinSpec(kind='all')
 
     def _translate_struct(self, ctx: AstToIrContext, struct: pss_ast.Struct, namespace_prefix: str = "") -> ir.DataTypeStruct:
         """Translate a PSS struct to IR DataTypeStruct
@@ -633,6 +853,40 @@ class AstToIrTranslator:
                     test=cond_expr,
                     body=true_stmts,
                     orelse=false_stmts,
+                ))
+
+        # ConstraintStmtForeach is a subclass of ConstraintScope, so it MUST be
+        # checked before the generic ConstraintScope branch.
+        elif isinstance(stmt, pss_ast.ConstraintStmtForeach):
+            it_node = stmt.getIt()
+            if it_node is None:
+                return
+            it_name_obj = it_node.getName()
+            if it_name_obj is None:
+                return
+            iter_var_name = (it_name_obj.getId()
+                             if hasattr(it_name_obj, 'getId') else str(it_name_obj))
+
+            collection_expr_node = stmt.getExpr()
+            if collection_expr_node is None:
+                return
+            collection_ir = self._translate_expression(ctx, collection_expr_node)
+            if collection_ir is None:
+                return
+
+            ctx.local_vars.add(iter_var_name)
+            foreach_body: List[ir.Stmt] = []
+            for j in range(stmt.numConstraints()):
+                sub = stmt.getConstraint(j)
+                if sub is not None:
+                    self._collect_constraint_stmt(ctx, sub, foreach_body)
+            ctx.local_vars.discard(iter_var_name)
+
+            if foreach_body:
+                body.append(ir.StmtForeach(
+                    target=ir.ExprRefLocal(name=iter_var_name),
+                    iter=collection_ir,
+                    body=foreach_body,
                 ))
 
         elif isinstance(stmt, pss_ast.ConstraintScope):
@@ -1956,3 +2210,12 @@ class AstToIrTranslator:
 
                 # Advance offset
                 current_offset += aligned_size
+
+
+def _activity_body_children(body):
+    """Return an iterable of children for an activity body scope (or empty)."""
+    if body is None:
+        return []
+    if hasattr(body, 'children'):
+        return body.children()
+    return []
