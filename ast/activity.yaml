@@ -242,6 +242,9 @@ classes:
     data:
     - target: UP<ExprRefPathContext>
     - with_c: UP<ConstraintStmt>
+    - initializers:
+        type: list<UP<ActionFieldInitializer>>
+        is_ctor: false
 
 - ActivityActionTypeTraversal:
     super: ActivityLabeledStmt
@@ -286,6 +289,20 @@ classes:
     data:
     - target: UP<DataTypeUserDefined>
     - with_c: UP<ConstraintStmt>
+    - initializers:
+        type: list<UP<ActionFieldInitializer>>
+        is_ctor: false
+
+- ActionFieldInitializer:
+    super: ScopeChild
+    doc: |
+        Single field assignment in a PSS 3.1 action initializer list.
+
+        Represents entries such as ``.x = 1`` or ``.cfg.mode = FAST`` used in
+        action-handle declarations and action traversal statements.
+    data:
+    - path: UP<ExprHierarchicalId>
+    - value: UP<Expr>
 
 - ActivityLabeledScope:
     super: SymbolScope
@@ -1106,7 +1123,6 @@ classes:
             ActivitySequence, ActivityParallel
     data:
     - body: UP<ScopeChild>
-
 
 
 

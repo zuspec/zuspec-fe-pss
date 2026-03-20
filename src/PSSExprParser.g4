@@ -51,12 +51,15 @@ package_body_item:
 	| struct_declaration
 	| enum_declaration
 	| covergroup_declaration
+	| annotation_declaration
+    | generic_constraint_declaration
 	| function_decl
 	| import_class_decl
 	| procedural_function // FIXME
 	| import_function
 	| target_template_function
 	| export_action
+	| export_function
 	| typedef_declaration
 	| import_stmt
     | pyimport_stmt // zuspec extension
@@ -66,6 +69,7 @@ package_body_item:
 	| package_declaration
 	| compile_assert_stmt
 	| package_body_compile_if
+	| annotation
 	| TOK_SEMICOLON // stmt_terminator
 //	| static_const_field_declaration	
 	;
@@ -129,8 +133,34 @@ extend_stmt:
 			(TOK_EXTEND is_enum=TOK_ENUM type_identifier TOK_LCBRACE
 				(enum_item (TOK_COMMA enum_item)*)?
 				TOK_RCBRACE
+			) |
+			(TOK_EXTEND is_annotation=TOK_ANNOTATION type_identifier TOK_LCBRACE
+				annotation_body_item*
+				TOK_RCBRACE
 			)
 		)
+;
+
+annotation_declaration:
+	TOK_ANNOTATION annotation_identifier template_param_decl_list? annotation_super_spec?
+	TOK_LCBRACE
+		annotation_body_item*
+	TOK_RCBRACE
+;
+
+annotation_super_spec:
+	TOK_COLON type_identifier
+;
+
+annotation_body_item:
+	annotation_attr_field
+	| compile_assert_stmt
+	| annotation_body_compile_if
+	| TOK_SEMICOLON
+;
+
+annotation_attr_field:
+	(TOK_STATIC TOK_CONST)? data_declaration
 ;
 
 const_field_declaration :
@@ -174,6 +204,13 @@ abstract_action_declaration:
 	TOK_ABSTRACT action_declaration
 	;
 
+override_action_declaration:
+    TOK_OVERRIDE TOK_ACTION action_identifier
+    TOK_LCBRACE
+        action_body_item_ann*
+    TOK_RCBRACE
+    ;
+
 action_super_spec:
 	TOK_COLON type_identifier
 ;
@@ -189,6 +226,7 @@ action_body_item:
 	| action_field_declaration
 	| symbol_declaration
 	| covergroup_declaration
+    | generic_constraint_declaration
 	| exec_block_stmt
 	| activity_scheduling_constraint
 	| attr_group
@@ -264,7 +302,7 @@ action_instantiation:
     ;
 
 action_handle_array_instance:
-	action_identifier array_dim
+	action_identifier array_dim+
 	;
 
 action_handle_single_instance:
@@ -321,6 +359,7 @@ struct_body_item:
 	constraint_declaration
 	| attr_field
 	| typedef_declaration
+	| generic_constraint_declaration
 	| exec_block_stmt
 	| attr_group
 	| compile_assert_stmt
@@ -480,6 +519,10 @@ export_action:
 	TOK_EXPORT (platform_qualifier)? action_type_identifier function_parameter_list_prototype TOK_SEMICOLON
 ;
 
+export_function:
+	TOK_EXPORT TOK_TARGET TOK_FUNCTION function_identifier TOK_SEMICOLON
+;
+
 
 /********************************************************************
  * B.7 Procedural statements
@@ -601,17 +644,20 @@ component_body_item:
 	| component_pool_declaration
 	| action_declaration
 	| abstract_action_declaration
+    | override_action_declaration
 	| object_bind_stmt
 	| exec_block
 	| struct_declaration
 	| enum_declaration
 	| covergroup_declaration
+    | generic_constraint_declaration
 	| function_decl
 	| import_class_decl
 	| procedural_function
 	| import_function
 	| target_template_function
 	| export_action
+	| export_function
 	| typedef_declaration
 	| import_stmt
 	| extend_stmt
@@ -622,7 +668,7 @@ component_body_item:
 	;
 
 component_data_declaration:
-	access_modifier? (is_static=TOK_STATIC is_const=TOK_CONST)? data_declaration
+	access_modifier? ((is_static=TOK_STATIC is_const=TOK_CONST) | is_instance=TOK_INSTANCE)? data_declaration
 	;
 
 // Note: LRM only supports a single pool per declaration
@@ -700,7 +746,7 @@ activity_action_traversal_stmt:
     ;
 
 action_handle_traversal_stmt:
-	identifier ( TOK_LSBRACE expression TOK_RSBRACE )? action_initializer_list? inline_constraints_or_empty
+	identifier ( TOK_LSBRACE expression TOK_RSBRACE )* action_initializer_list? inline_constraints_or_empty
     ;
 
 action_type_traversal_stmt:
@@ -880,7 +926,7 @@ data_declaration:
 	;
 
 data_instantiation:
-	identifier (array_dim)? (TOK_SINGLE_EQ constant_expression)?
+	identifier (array_dim)* (TOK_SINGLE_EQ constant_expression)? action_initializer_list?
 	;
 
 array_dim:
@@ -1077,6 +1123,33 @@ constraint_declaration:
 		| ((is_dynamic=TOK_DYNAMIC)? TOK_CONSTRAINT identifier constraint_block)
 	)
 	;
+
+generic_constraint_declaration:
+    generic_constraint_bool
+    | generic_constraint_value
+    ;
+
+generic_constraint_bool:
+    is_static=TOK_STATIC? TOK_CONSTRAINT identifier generic_constraint_params constraint_set
+    ;
+
+generic_constraint_value:
+    is_static=TOK_STATIC? TOK_CONSTRAINT generic_constraint_data_type identifier
+        generic_constraint_params expression_constraint_item
+    ;
+
+generic_constraint_params:
+    TOK_LPAREN (generic_constraint_param (TOK_COMMA generic_constraint_param)*)? TOK_RPAREN
+    ;
+
+generic_constraint_param:
+    is_const=TOK_CONST? generic_constraint_data_type identifier
+    ;
+
+generic_constraint_data_type:
+    is_numeric=TOK_NUMERIC
+    | data_type
+    ;
 
 constraint_set:
 	constraint_body_item
@@ -1276,9 +1349,19 @@ package_body_compile_if:
 	(TOK_ELSE false_body=package_body_compile_if_item)?
 	;
 
+annotation_body_compile_if:
+	TOK_COMPILE TOK_IF TOK_LPAREN cond=constant_expression TOK_RPAREN true_body=annotation_body_compile_if_item
+	(TOK_ELSE false_body=annotation_body_compile_if_item)?
+	;
+
 package_body_compile_if_item:
 	package_body_item
 	| (TOK_LCBRACE package_body_item* TOK_RCBRACE)
+	;
+
+annotation_body_compile_if_item:
+	annotation_body_item
+	| (TOK_LCBRACE annotation_body_item* TOK_RCBRACE)
 	;
 
 action_body_compile_if:
@@ -1545,6 +1628,7 @@ member_path_elem_index:
 
 
 action_identifier: identifier;
+annotation_identifier: identifier;
 component_identifier: identifier;
 covercross_identifier: identifier;
 covergroup_identifier: identifier;
@@ -1665,15 +1749,33 @@ filename_string: DOUBLE_QUOTED_STRING;
 	
 /**
  * Annotations allow meta-data to be associated with model elements
- * TODO: post-2.1 feature
+ * PSS 3.1 feature
  *
  * annotate <path> <type_identifier>();
  */	
 annotation:
-    TOK_AT type_identifier annotation_parameter_list?
+    (TOK_AT|TOK_COMMENT_AT) type_identifier annotation_parameter_list?
     ;
 
 annotation_parameter_list:
+	annotation_positional_parameter_list
+	| annotation_namemapped_parameter_list
+	| annotation_mixed_parameter_list
+	;
+
+annotation_positional_parameter_list:
 	TOK_LPAREN ( expression ( TOK_COMMA expression )* )? TOK_RPAREN
+    ;
+
+annotation_namemapped_parameter_list:
+	TOK_LPAREN annotation_namemapped_parameter_elem ( TOK_COMMA annotation_namemapped_parameter_elem )* TOK_RPAREN
+    ;
+
+annotation_mixed_parameter_list:
+	TOK_LPAREN expression ( TOK_COMMA expression )* TOK_COMMA annotation_namemapped_parameter_elem ( TOK_COMMA annotation_namemapped_parameter_elem )* TOK_RPAREN
+    ;
+
+annotation_namemapped_parameter_elem:
+	identifier TOK_SINGLE_EQ expression
     ;
 	

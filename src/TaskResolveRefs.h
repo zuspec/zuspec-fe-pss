@@ -25,6 +25,7 @@
 #include "zsp/parser/ISymbolTableIterator.h"
 #include "zsp/ast/ISymbolScope.h"
 #include "zsp/ast/impl/VisitorBase.h"
+#include <set>
 #include "ResolveContext.h"
 #include "TaskResolveBase.h"
 
@@ -97,12 +98,18 @@ public:
 
     virtual void visitStruct(ast::IStruct *i) override;
 
+    virtual void visitGenericConstraintDeclBool(ast::IGenericConstraintDeclBool *i) override;
+
+    virtual void visitGenericConstraintDeclValue(ast::IGenericConstraintDeclValue *i) override;
+
 protected:
     ast::IScopeChild *resolvePath(ast::ISymbolRefPath *path);
 
+    bool isGenericConstraintParam(const std::string &name) const;
 
 private:
-    static dmgr::IDebug     *m_dbg;
+    static dmgr::IDebug                 *m_dbg;
+    std::set<std::string>               m_generic_constraint_params;
 
 };
 

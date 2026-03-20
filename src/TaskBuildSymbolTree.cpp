@@ -682,7 +682,7 @@ void TaskBuildSymbolTree::visitScopeChild(ast::IScopeChild *i) {
 
 void TaskBuildSymbolTree::visitTypeScope(ast::ITypeScope *i) {
     DEBUG_ENTER("visitTypeScope %s %d children", 
-        i->getName()->getId().c_str(),
+        (i->getName() ? i->getName()->getId().c_str() : "<unnamed>"),
         i->getChildren().size());
     ast::ISymbolScope *scope = symbolScope();
 
@@ -706,13 +706,13 @@ void TaskBuildSymbolTree::visitTypeScope(ast::ITypeScope *i) {
                     "duplicate parameter name '" + (*it)->getName()->getId() + "'",
                     MarkerSeverityE::Error,
                     (*it)->getLocation());
-                m_marker_l->marker(&m);
+                if (m_marker_l) m_marker_l->marker(&m);
             }
         }
     } else {
         DEBUG("No plist");
     }
-    ast::ISymbolTypeScope *ts = m_factory->mkSymbolTypeScope(i->getName()->getId(), plist);
+    ast::ISymbolTypeScope *ts = m_factory->mkSymbolTypeScope(i->getName() ? i->getName()->getId() : "<unnamed>", plist);
     ts->setSynthetic(true);
     ts->setLocation(i->getLocation());
     ts->setTarget(i);

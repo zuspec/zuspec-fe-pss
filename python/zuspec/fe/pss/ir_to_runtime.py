@@ -292,7 +292,7 @@ class IrToRuntimeBuilder:
         )
         cls = _stdlib_dc.dataclass(cls, kw_only=True)
         cls._zdc_struct = merged_dt
-        if dt.activity_ir is not None:
+        if getattr(dt, "activity_ir", None) is not None:
             cls.__activity__ = dt.activity_ir
         return cls
 

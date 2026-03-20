@@ -96,6 +96,9 @@ classes:
         - assocData:
             type: UP<AssocData>
             is_ctor: false
+        - annotations:
+            type: list<UP<Annotation>>
+            is_ctor: false
 
     - ScopeChildRef:
         super: ScopeChild
@@ -333,6 +336,10 @@ classes:
                 Component, TypeScope, ActivityStmt
         data:
         - is_abstract: bool
+        - is_override:
+            type: bool
+            is_ctor: false
+            init: false
 
     - Component:
         super: TypeScope

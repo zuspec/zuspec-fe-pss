@@ -1,24 +1,30 @@
-	   pytest.ini
-	   python/zuspec/fe/pss/__init__.py
-	   python/zuspec/fe/pss/ast_to_ir.py
+	   ast/activity.yaml
+	   ast/constraint.yaml
+	   ast/coretypes.yaml
+	   ast/expr.yaml
+	   ast/extension.yaml
+	   ast/field.yaml
+	   ast/functions.yaml
+	   out
+	   python/zuspec/fe/pss/ir_to_runtime.py
+	   setup.py
 	   src/AstBuilderInt.cpp
 	   src/AstBuilderInt.h
-	   tests/python/test_ast_to_ir.py
+	   src/PSSExprLexer.g4
+	   src/PSSExprParser.g4
+	   src/PSSLexer.g4
+	   src/PSSParser.g4
+	   src/TaskBuildSymbolTree.cpp
+	   src/TaskResolveRefs.cpp
+	   src/TaskResolveRefs.h
+	   tests/python/parsing/test_monitors.py
 
-	python/zuspec/fe/pss/ir_to_runtime.py
-	tests/python/execution/
-	tests/python/integration/test_pss_conditional_constraints_rt.py
-	tests/python/integration/test_pss_foreach_constraints_rt.py
-	tests/python/integration/test_pss_logical_constraints_rt.py
-	tests/python/integration/test_pss_set_constraints_rt.py
-	tests/python/integration/test_pss_static_constraints_rt.py
-	tests/python/integration/test_pss_unique_constraints_rt.py
-	tests/python/test_aggregate_literals.py
-	tests/python/test_collections_ast_to_ir.py
-	tests/python/test_component_arrays_and_functions.py
-	tests/python/test_constraints_ast_to_ir.py
-	tests/python/test_inheritance_and_exec.py
-	tests/python/test_package_and_yield.py
-	tests/python/test_scalar_types_ast_to_ir.py
-	tests/python/test_string_and_builtins.py
+	ast/annotation.yaml
+	tests/python/parsing/test_action_initializers_31.py
+	tests/python/parsing/test_annotations_31.py
+	tests/python/parsing/test_compile_time_semantics.py
+	tests/python/parsing/test_component_instance_31.py
+	tests/python/parsing/test_export_function_31.py
+	tests/python/parsing/test_generic_constraints_31.py
+	tests/python/parsing/test_override_action_31.py
 

@@ -2,6 +2,7 @@
 enums:
   - ExtendTargetE:
     - Action     # Extend action type
+    - Annotation # Extend annotation type
     - Buffer     # Extend buffer type
     - Component  # Extend component type
     - Enum       # Extend enum type
