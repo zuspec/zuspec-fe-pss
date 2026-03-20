@@ -1283,52 +1283,58 @@ class AstToIrTranslator:
         if init_expr:
             value = self._translate_expression(ctx, init_expr)
 
-        # Create name expression for target
+        # Create name expression for target and register as local variable
         target = ir.ExprRefLocal(name=var_name)
+        ctx.local_vars.add(var_name)
 
         return ir.StmtAnnAssign(target=target, annotation=var_type, value=value)
 
-    def _translate_stmt_assignment(self, ctx: AstToIrContext, stmt: pss_ast.ProceduralStmtAssignment) -> ir.StmtAssign:
-        """Translate an assignment statement"""
-        # Get left-hand side
+    def _translate_stmt_assignment(self, ctx: AstToIrContext, stmt: pss_ast.ProceduralStmtAssignment):
+        """Translate an assignment or compound-assignment statement."""
         lhs = stmt.getLhs()
         target = self._translate_expression(ctx, lhs)
-
-        # Get right-hand side
         rhs = stmt.getRhs()
         value = self._translate_expression(ctx, rhs)
 
+        op = stmt.getOp()
+        _aug_op_map = {
+            pss_ast.AssignOp.AssignOp_PlusEq:  ir.AugOp.Add,
+            pss_ast.AssignOp.AssignOp_MinusEq: ir.AugOp.Sub,
+            pss_ast.AssignOp.AssignOp_ShlEq:   ir.AugOp.LShift,
+            pss_ast.AssignOp.AssignOp_ShrEq:   ir.AugOp.RShift,
+            pss_ast.AssignOp.AssignOp_OrEq:    ir.AugOp.BitOr,
+            pss_ast.AssignOp.AssignOp_AndEq:   ir.AugOp.BitAnd,
+        }
+        if op in _aug_op_map:
+            return ir.StmtAugAssign(target=target, op=_aug_op_map[op], value=value)
         return ir.StmtAssign(targets=[target], value=value)
 
     def _translate_stmt_if(self, ctx: AstToIrContext, stmt: pss_ast.ProceduralStmtIfElse) -> ir.StmtIf:
-        """Translate an if-else statement"""
-        # Get condition from first if clause
-        if_clause = stmt.getIf_then(0)
-        cond = self._translate_expression(ctx, if_clause.getCond())
+        """Translate an if / else-if / else chain into nested StmtIf nodes."""
+        def _translate_body(scope):
+            stmts = []
+            if scope:
+                for child in scope.children():
+                    if child is None:
+                        continue
+                    s = self._translate_statement(ctx, child)
+                    if s:
+                        stmts.append(s)
+            return stmts
 
-        # Get then body
-        then_body_scope = if_clause.getBody()
-        then_body = []
-        if then_body_scope:
-            for child in then_body_scope.children():
-                if child is None:
-                    continue
-                stmt_ir = self._translate_statement(ctx, child)
-                if stmt_ir:
-                    then_body.append(stmt_ir)
+        # Build the final else branch first
+        else_body = _translate_body(stmt.getElse_then())
 
-        # Get else body (if present)
-        else_body = []
-        else_clause = stmt.getElse_then()
-        if else_clause:
-            for child in else_clause.children():
-                if child is None:
-                    continue
-                stmt_ir = self._translate_statement(ctx, child)
-                if stmt_ir:
-                    else_body.append(stmt_ir)
+        # Walk if-then clauses from last to first, nesting each into the else of the previous
+        num_clauses = stmt.numIf_then()
+        result = else_body
+        for i in range(num_clauses - 1, -1, -1):
+            clause = stmt.getIf_then(i)
+            cond = self._translate_expression(ctx, clause.getCond())
+            then_body = _translate_body(clause.getBody())
+            result = [ir.StmtIf(test=cond, body=then_body, orelse=result)]
 
-        return ir.StmtIf(test=cond, body=then_body, orelse=else_body)
+        return result[0] if result else ir.StmtPass()
 
     def _translate_stmt_while(self, ctx: AstToIrContext, stmt) -> ir.StmtWhile:
         """Translate a while loop"""
@@ -1353,6 +1359,15 @@ class AstToIrTranslator:
         # Get count expression
         count_expr = self._translate_expression(ctx, stmt.getCount())
 
+        # Get optional iterator variable: "repeat (i : 10)" has getIt_id() == "i"
+        it_id = stmt.getIt_id()
+        target = None
+        iter_name = None
+        if it_id is not None:
+            iter_name = it_id.getId() if hasattr(it_id, 'getId') else str(it_id)
+            target = ir.ExprRefLocal(name=iter_name)
+            ctx.local_vars.add(iter_name)  # so body references become ExprRefLocal
+
         # Get body
         body_scope = stmt.getBody()
         body = []
@@ -1364,16 +1379,15 @@ class AstToIrTranslator:
                 if stmt_ir:
                     body.append(stmt_ir)
 
-        # Create a for loop with count as the iterator
-        # For simplicity, use count_expr as the iter
-        return ir.StmtFor(target=None, iter=count_expr, body=body)
+        if iter_name is not None:
+            ctx.local_vars.discard(iter_name)
 
-    def _translate_stmt_repeat_while(self, ctx: AstToIrContext, stmt) -> ir.StmtWhile:
-        """Translate a repeat-while statement (do-while)"""
-        # Get condition
+        return ir.StmtFor(target=target, iter=count_expr, body=body)
+
+    def _translate_stmt_repeat_while(self, ctx: AstToIrContext, stmt) -> ir.StmtRepeatWhile:
+        """Translate a repeat-while statement (PSS do-while: body executes at least once)."""
         cond = self._translate_expression(ctx, stmt.getExpr())
 
-        # Get body
         body_scope = stmt.getBody()
         body = []
         if body_scope:
@@ -1384,9 +1398,7 @@ class AstToIrTranslator:
                 if stmt_ir:
                     body.append(stmt_ir)
 
-        # Note: IR StmtWhile doesn't have a do-while flag, so we just use while
-        # The semantics difference would need to be handled at a higher level
-        return ir.StmtWhile(test=cond, body=body)
+        return ir.StmtRepeatWhile(condition=cond, body=body)
 
     def _translate_stmt_foreach(self, ctx: AstToIrContext, stmt: pss_ast.ProceduralStmtForeach) -> Optional[ir.StmtForeach]:
         """Translate a foreach statement: foreach (e : items) { ... }"""
@@ -1407,9 +1419,15 @@ class AstToIrTranslator:
             return None
 
         index_var = None
+        idx_name = None
         if idx_id is not None:
             idx_name = idx_id.getId() if hasattr(idx_id, 'getId') else str(idx_id)
             index_var = ir.ExprRefLocal(name=idx_name)
+
+        # Register loop variables so body references resolve to ExprRefLocal
+        ctx.local_vars.add(iter_name)
+        if idx_name is not None:
+            ctx.local_vars.add(idx_name)
 
         body_scope = stmt.getBody()
         body = []
@@ -1420,6 +1438,10 @@ class AstToIrTranslator:
                 stmt_ir = self._translate_statement(ctx, child)
                 if stmt_ir:
                     body.append(stmt_ir)
+
+        ctx.local_vars.discard(iter_name)
+        if idx_name is not None:
+            ctx.local_vars.discard(idx_name)
 
         return ir.StmtForeach(target=target, iter=collection_ir, body=body, index_var=index_var)
 

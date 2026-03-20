@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 import zuspec.dataclasses as zdc
 from zuspec.dataclasses import ir as zdc_ir
-from zuspec.dataclasses.rt.executor import ObjectExecutor
+from zuspec.dataclasses.rt.executor import ObjectExecutor, _ReturnSignal
 
 if TYPE_CHECKING:
     from .ast_to_ir import AstToIrContext
@@ -304,7 +304,10 @@ class IrToRuntimeBuilder:
         stmts = func.body
 
         async def body(self_action):
-            ObjectExecutor(self_action).execute_stmts(stmts)
+            try:
+                ObjectExecutor(self_action).execute_stmts(stmts)
+            except _ReturnSignal:
+                pass
 
         return body
 
@@ -312,7 +315,10 @@ class IrToRuntimeBuilder:
         stmts = func.body
 
         def __post_init__(self_comp):
-            ObjectExecutor(self_comp).execute_stmts(stmts)
+            try:
+                ObjectExecutor(self_comp).execute_stmts(stmts)
+            except _ReturnSignal:
+                pass
 
         return __post_init__
 
@@ -320,7 +326,10 @@ class IrToRuntimeBuilder:
         stmts = func.body
 
         def fn(self_action):
-            ObjectExecutor(self_action).execute_stmts(stmts)
+            try:
+                return ObjectExecutor(self_action).execute_stmts(stmts)
+            except _ReturnSignal as r:
+                return r.value
 
         fn.__name__ = func.name
         return fn
@@ -343,8 +352,11 @@ class IrToRuntimeBuilder:
             return int, 0
         elif isinstance(dt, (zdc_ir.DataTypeChandle,)):
             return int, 0
-        elif isinstance(dt, (zdc_ir.DataTypeList, zdc_ir.DataTypeArray)):
+        elif isinstance(dt, zdc_ir.DataTypeList):
             return list, _stdlib_dc.field(default_factory=list)
+        elif isinstance(dt, zdc_ir.DataTypeArray):
+            n = dt.size if dt.size > 0 else 0
+            return list, _stdlib_dc.field(default_factory=lambda _n=n: [0] * _n)
         elif isinstance(dt, zdc_ir.DataTypeMap):
             return dict, _stdlib_dc.field(default_factory=dict)
         elif isinstance(dt, zdc_ir.DataTypeSet):
@@ -371,7 +383,8 @@ class IrToRuntimeBuilder:
         elif isinstance(dt, zdc_ir.DataTypeList):
             return list, zdc.field(default_factory=list)
         elif isinstance(dt, zdc_ir.DataTypeArray):
-            return list, zdc.field(default_factory=list)
+            n = dt.size if dt.size > 0 else 0
+            return list, zdc.field(default_factory=lambda _n=n: [0] * _n)
         elif isinstance(dt, zdc_ir.DataTypeMap):
             return dict, zdc.field(default_factory=dict)
         elif isinstance(dt, zdc_ir.DataTypeSet):
