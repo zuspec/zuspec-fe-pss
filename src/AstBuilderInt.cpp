@@ -21,11 +21,21 @@
 #include "zsp/ast/IFactory.h"
 #include "zsp/ast/IAction.h"
 #include "zsp/ast/IComponent.h"
+#include "zsp/ast/IField.h"
+#include "zsp/ast/IFieldClaim.h"
+#include "zsp/ast/IFieldCompRef.h"
+#include "zsp/ast/IFieldRef.h"
+#include "zsp/ast/IActionHandleField.h"
+#include "zsp/ast/IDataTypeEnum.h"
+#include "zsp/ast/IDataTypeUserDefined.h"
+#include "zsp/ast/IEnumItem.h"
+#include "zsp/ast/IEnumDecl.h"
 #include "zsp/ast/IExprId.h"
 #include "zsp/ast/IExprIn.h"
 #include "zsp/ast/IExprOpenRangeList.h"
 #include "zsp/ast/IExprOpenRangeValue.h"
 #include "zsp/ast/INamedScope.h"
+#include "zsp/ast/IPackageScope.h"
 #include "zsp/ast/IPackageImportStmt.h"
 #include "zsp/ast/Location.h"
 #include "Marker.h"
@@ -161,6 +171,16 @@ antlrcpp::Any AstBuilderInt::visitPackage_declaration(
 	return 0;
 }
 
+antlrcpp::Any AstBuilderInt::visitPackage_body_compile_if(PSSParser::Package_body_compile_ifContext *ctx) {
+    int64_t cond = 0;
+    if (evalConstantExpression(ctx->cond, cond) && cond) {
+        visitCompileIfItem(ctx->true_body);
+    } else if (ctx->false_body) {
+        visitCompileIfItem(ctx->false_body);
+    }
+    return 0;
+}
+
 antlrcpp::Any AstBuilderInt::visitImport_stmt(PSSParser::Import_stmtContext *ctx) {
 	DEBUG_ENTER("visitImport_stmt");
 	bool is_wildcard = false;
@@ -214,6 +234,7 @@ antlrcpp::Any AstBuilderInt::visitPyimport_from_module(PSSParser::Pyimport_from_
 
 static std::map<std::string,ast::ExtendTargetE> ExtendKind_m = {
 	{"action", ast::ExtendTargetE::Action},
+	{"annotation", ast::ExtendTargetE::Annotation},
 	{"buffer", ast::ExtendTargetE::Buffer},
 	{"component", ast::ExtendTargetE::Component},
 	{"enum", ast::ExtendTargetE::Enum},
@@ -223,17 +244,31 @@ static std::map<std::string,ast::ExtendTargetE> ExtendKind_m = {
 	{"struct", ast::ExtendTargetE::Struct}
 };
 
+static FieldAttr accessModifierToFieldAttr(PSSParser::Access_modifierContext *ctx) {
+    if (!ctx) {
+        return FieldAttr::NoFlags;
+    } else if (ctx->TOK_PRIVATE()) {
+        return FieldAttr::Private;
+    } else if (ctx->TOK_PROTECTED()) {
+        return FieldAttr::Protected;
+    } else {
+        return FieldAttr::NoFlags;
+    }
+}
+
 antlrcpp::Any AstBuilderInt::visitExtend_stmt(PSSParser::Extend_stmtContext *ctx) {
 	DEBUG_ENTER("visitExtend_stmt");
 	ExtendTargetE kind;
     
     if (ctx->is_action) {
         kind = ast::ExtendTargetE::Action;
+    } else if (ctx->is_annotation) {
+        kind = ast::ExtendTargetE::Annotation;
     } else if (ctx->is_component) {
         kind = ast::ExtendTargetE::Component;
     } else if (ctx->is_enum) {
         kind = ast::ExtendTargetE::Enum;
-    } else if (ctx->struct_kind()->img) {
+    } else if (ctx->struct_kind() && ctx->struct_kind()->img) {
         kind = ast::ExtendTargetE::Struct;
     } else {
         std::map<std::string,ast::ExtendTargetE>::const_iterator it =
@@ -283,6 +318,16 @@ antlrcpp::Any AstBuilderInt::visitExtend_stmt(PSSParser::Extend_stmtContext *ctx
 					(*it)->accept(this);
 				}
 			} break;
+			case ast::ExtendTargetE::Annotation: {
+				std::vector<PSSParser::Annotation_body_itemContext *> items =
+					ctx->annotation_body_item();
+                DEBUG("Extend Annotation: %d items", items.size());
+				for (std::vector<PSSParser::Annotation_body_itemContext *>::const_iterator
+					it=items.begin();
+					it!=items.end(); it++) {
+					(*it)->accept(this);
+				}
+			} break;
 			case ast::ExtendTargetE::Component: {
 				std::vector<PSSParser::Component_body_item_annContext *> items =
 					ctx->component_body_item_ann();
@@ -320,6 +365,131 @@ antlrcpp::Any AstBuilderInt::visitExtend_stmt(PSSParser::Extend_stmtContext *ctx
 	return 0;
 }
 
+antlrcpp::Any AstBuilderInt::visitAnnotation_declaration(PSSParser::Annotation_declarationContext *ctx) {
+	DEBUG_ENTER("visitAnnotation_declaration");
+
+	ast::ITypeIdentifier *super_t = 0;
+	if (ctx->annotation_super_spec()) {
+		super_t = mkTypeId(ctx->annotation_super_spec()->type_identifier());
+	}
+
+	ast::IAnnotationDecl *annotation = m_factory->mkAnnotationDecl(
+		mkId(ctx->annotation_identifier()->identifier()),
+		super_t);
+    setLoc(annotation, ctx->start);
+
+	if (ctx->template_param_decl_list()) {
+        annotation->setParams(mkTypeParamDecl(ctx->template_param_decl_list()));
+	}
+
+	addChild(annotation, ctx->start, ctx->TOK_RCBRACE()->getSymbol());
+	push_scope(annotation);
+
+	std::vector<PSSParser::Annotation_body_itemContext *> items = ctx->annotation_body_item();
+	for (std::vector<PSSParser::Annotation_body_itemContext *>::const_iterator
+		it=items.begin();
+		it!=items.end(); it++) {
+		(*it)->accept(this);
+	}
+
+	pop_scope();
+
+	DEBUG_LEAVE("visitAnnotation_declaration");
+	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitAnnotation_body_compile_if(PSSParser::Annotation_body_compile_ifContext *ctx) {
+    int64_t cond = 0;
+    if (evalConstantExpression(ctx->cond, cond) && cond) {
+        visitCompileIfItem(ctx->true_body);
+    } else if (ctx->false_body) {
+        visitCompileIfItem(ctx->false_body);
+    }
+    return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitAnnotation_attr_field(PSSParser::Annotation_attr_fieldContext *ctx) {
+	DEBUG_ENTER("visitAnnotation_attr_field");
+
+	m_field_depth++;
+	ctx->data_declaration()->accept(this);
+	m_field_depth--;
+
+	for (std::vector<ast::IField *>::const_iterator
+		it=m_fields.begin();
+		it!=m_fields.end(); it++) {
+		FieldAttr attr = (*it)->getAttr();
+
+		if (ctx->TOK_STATIC()) {
+			attr |= FieldAttr::Static;
+			attr |= FieldAttr::Const;
+		}
+
+		(*it)->setAttr(attr);
+	}
+
+	if (!m_field_depth) {
+		m_fields.clear();
+	}
+
+	DEBUG_LEAVE("visitAnnotation_attr_field");
+	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitAnnotation(PSSParser::AnnotationContext *ctx) {
+    DEBUG_ENTER("visitAnnotation");
+
+    ast::IAnnotation *annotation = m_factory->mkAnnotation(
+        mkTypeId(ctx->type_identifier()));
+    setLoc(annotation, ctx->start);
+
+    if (ctx->annotation_parameter_list()) {
+        if (ctx->annotation_parameter_list()->annotation_positional_parameter_list()) {
+            std::vector<PSSParser::ExpressionContext *> exprs =
+                ctx->annotation_parameter_list()->annotation_positional_parameter_list()->expression();
+            for (std::vector<PSSParser::ExpressionContext *>::const_iterator
+                it=exprs.begin();
+                it!=exprs.end(); it++) {
+                { ast::IAnnotationParam *param = m_factory->mkAnnotationParam(mkExpr(*it));
+                annotation->getParameters().push_back(ast::IAnnotationParamUP(param)); }
+            }
+        } else if (ctx->annotation_parameter_list()->annotation_namemapped_parameter_list()) {
+            std::vector<PSSParser::Annotation_namemapped_parameter_elemContext *> elems =
+                ctx->annotation_parameter_list()->annotation_namemapped_parameter_list()->annotation_namemapped_parameter_elem();
+            for (std::vector<PSSParser::Annotation_namemapped_parameter_elemContext *>::const_iterator
+                it=elems.begin();
+                it!=elems.end(); it++) {
+                { ast::IAnnotationParam *param = m_factory->mkAnnotationParam(
+                        mkExpr((*it)->expression()));
+                    param->setName(mkId((*it)->identifier()));
+                    annotation->getParameters().push_back(ast::IAnnotationParamUP(param)); }
+            }
+        } else if (ctx->annotation_parameter_list()->annotation_mixed_parameter_list()) {
+            // Positional params first
+            std::vector<PSSParser::ExpressionContext *> exprs =
+                ctx->annotation_parameter_list()->annotation_mixed_parameter_list()->expression();
+            for (auto *expr : exprs) {
+                ast::IAnnotationParam *param = m_factory->mkAnnotationParam(mkExpr(expr));
+                annotation->getParameters().push_back(ast::IAnnotationParamUP(param));
+            }
+            // Named params after
+            std::vector<PSSParser::Annotation_namemapped_parameter_elemContext *> elems =
+                ctx->annotation_parameter_list()->annotation_mixed_parameter_list()->annotation_namemapped_parameter_elem();
+            for (auto *elem : elems) {
+                ast::IAnnotationParam *param = m_factory->mkAnnotationParam(
+                    mkExpr(elem->expression()));
+                param->setName(mkId(elem->identifier()));
+                annotation->getParameters().push_back(ast::IAnnotationParamUP(param));
+            }
+        }
+    }
+
+    m_pending_annotations.push_back(annotation);
+
+    DEBUG_LEAVE("visitAnnotation");
+    return 0;
+}
+
 antlrcpp::Any AstBuilderInt::visitConst_field_declaration(PSSParser::Const_field_declarationContext *ctx) {
 	DEBUG_ENTER("visitConst_field_declaration");
 
@@ -339,6 +509,30 @@ antlrcpp::Any AstBuilderInt::visitConst_field_declaration(PSSParser::Const_field
 
 	DEBUG_LEAVE("visitConst_field_declaration");
 	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitCompile_assert_stmt(PSSParser::Compile_assert_stmtContext *ctx) {
+    int64_t cond = 0;
+    if (!evalConstantExpression(ctx->cond, cond) || !cond) {
+        if (m_marker_l) {
+            ast::Location loc;
+            loc.fileid = m_file_id;
+            loc.lineno = ctx->start->getLine();
+            loc.linepos = ctx->start->getCharPositionInLine()+1;
+            loc.extent = ctx->getText().size();
+            std::string msg = "compile assert failed";
+            if (ctx->msg) {
+                std::string text = ctx->msg->getText();
+                if (text.size() >= 2) {
+                    text = text.substr(1, text.size()-2);
+                }
+                msg += ": " + text;
+            }
+            Marker m(msg, MarkerSeverityE::Error, loc);
+            m_marker_l->marker(&m);
+        }
+    }
+    return 0;
 }
 
 // B.2 Action declaration
@@ -396,6 +590,34 @@ antlrcpp::Any AstBuilderInt::visitAbstract_action_declaration(PSSParser::Abstrac
 	return 0;
 }
 
+antlrcpp::Any AstBuilderInt::visitOverride_action_declaration(PSSParser::Override_action_declarationContext *ctx) {
+    DEBUG_ENTER("visitOverride_action_declaration");
+
+    // Map override action to IExtendType with Action kind.
+    ast::ITypeIdentifier *target_id = m_factory->mkTypeIdentifier();
+    target_id->getElems().push_back(ast::ITypeIdentifierElemUP(
+        m_factory->mkTypeIdentifierElem(
+            mkId(ctx->action_identifier()->identifier()), 0)));
+
+    ast::IExtendType *ext = m_factory->mkExtendType(
+        ast::ExtendTargetE::Action,
+        target_id);
+    setLoc(ext, ctx->start);
+
+    addChild(ext, ctx->start, ctx->TOK_RCBRACE()->getSymbol());
+    push_scope(ext);
+
+    std::vector<PSSParser::Action_body_item_annContext *> items = ctx->action_body_item_ann();
+    for (auto *item : items) {
+        item->accept(this);
+    }
+
+    pop_scope();
+
+    DEBUG_LEAVE("visitOverride_action_declaration");
+    return 0;
+}
+
 antlrcpp::Any AstBuilderInt::visitActivity_bind_stmt(PSSParser::Activity_bind_stmtContext *ctx) {
     DEBUG_ENTER("visitActivity_bind_stmt");
     ast::IExprHierarchicalId *lhs;
@@ -438,6 +660,16 @@ antlrcpp::Any AstBuilderInt::visitActivity_declaration(PSSParser::Activity_decla
     addChild(activity, ctx->start, ctx->TOK_RCBRACE()->getSymbol());
     
     DEBUG_LEAVE("visitActivity_declaration");
+    return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitAction_body_compile_if(PSSParser::Action_body_compile_ifContext *ctx) {
+    int64_t cond = 0;
+    if (evalConstantExpression(ctx->cond, cond) && cond) {
+        visitCompileIfItem(ctx->true_body);
+    } else if (ctx->false_body) {
+        visitCompileIfItem(ctx->false_body);
+    }
     return 0;
 }
 
@@ -495,6 +727,56 @@ antlrcpp::Any AstBuilderInt::visitResource_ref_field_declaration(PSSParser::Reso
 	}
 
 	DEBUG_LEAVE("visitResource_ref_field_declaration");
+	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitAction_handle_declaration(PSSParser::Action_handle_declarationContext *ctx) {
+	DEBUG_ENTER("visitAction_handle_declaration");
+
+	std::vector<PSSParser::Action_instantiationContext *> items = ctx->action_instantiation();
+	for (std::vector<PSSParser::Action_instantiationContext *>::const_iterator
+		it=items.begin();
+		it!=items.end(); it++) {
+        ast::IDataType *type = mkDataTypeUserDefined(ctx->action_type_identifier()->type_identifier());
+        ast::IExprId *name = 0;
+        antlr4::Token *name_tok = 0;
+        PSSParser::Action_initializer_listContext *init_l = 0;
+
+        if ((*it)->action_handle_array_instance()) {
+            name = mkId((*it)->action_handle_array_instance()->action_identifier()->identifier());
+            name_tok = (*it)->action_handle_array_instance()->action_identifier()->start;
+            std::vector<PSSParser::Array_dimContext *> dims = (*it)->action_handle_array_instance()->array_dim();
+            for (std::vector<PSSParser::Array_dimContext *>::reverse_iterator
+                dim_it=dims.rbegin();
+                dim_it!=dims.rend(); dim_it++) {
+                type = mkDataTypeArray(
+                    type,
+                    mkExpr((*dim_it)->constant_expression()->expression()));
+            }
+        } else {
+            name = mkId((*it)->action_handle_single_instance()->action_identifier()->identifier());
+            name_tok = (*it)->action_handle_single_instance()->action_identifier()->start;
+            init_l = (*it)->action_handle_single_instance()->action_initializer_list();
+        }
+
+        ast::IActionHandleField *field = m_factory->mkActionHandleField(
+            name,
+            type);
+        setLoc(field, name_tok);
+
+        if (init_l) {
+            std::vector<ast::IActionFieldInitializer *> inits = mkActionFieldInitializers(init_l);
+            for (std::vector<ast::IActionFieldInitializer *>::const_iterator
+                init_it=inits.begin();
+                init_it!=inits.end(); init_it++) {
+                field->getInitializers().push_back(ast::IActionFieldInitializerUP(*init_it));
+            }
+        }
+
+        addChild(field, ctx->start);
+	}
+
+	DEBUG_LEAVE("visitAction_handle_declaration");
 	return 0;
 }
 
@@ -559,6 +841,26 @@ antlrcpp::Any AstBuilderInt::visitStruct_declaration(PSSParser::Struct_declarati
 
 	DEBUG_LEAVE("visitStruct_declaration");
 	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitStruct_body_compile_if(PSSParser::Struct_body_compile_ifContext *ctx) {
+    int64_t cond = 0;
+    if (evalConstantExpression(ctx->cond, cond) && cond) {
+        visitCompileIfItem(ctx->true_body);
+    } else if (ctx->false_body) {
+        visitCompileIfItem(ctx->false_body);
+    }
+    return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitMonitor_body_compile_if(PSSParser::Monitor_body_compile_ifContext *ctx) {
+    int64_t cond = 0;
+    if (evalConstantExpression(ctx->constant_expression(), cond) && cond) {
+        visitCompileIfItem(ctx->monitor_body_compile_if_item(0));
+    } else if (ctx->monitor_body_compile_if_item().size() > 1) {
+        visitCompileIfItem(ctx->monitor_body_compile_if_item(1));
+    }
+    return 0;
 }
 
 /* TODO: setLoc checkpoint */
@@ -734,6 +1036,19 @@ antlrcpp::Any AstBuilderInt::visitImport_function(PSSParser::Import_functionCont
         addChild(func, ctx->start);
     }
     DEBUG_LEAVE("visitImport_function");
+    return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitExport_function(PSSParser::Export_functionContext *ctx) {
+    DEBUG_ENTER("visitExport_function");
+
+    ast::IExportFunction *func = m_factory->mkExportFunction(
+        ast::PlatQual::PlatQual_Target,
+        mkId(ctx->function_identifier()->identifier()));
+    setLoc(func, ctx->start);
+    addChild(func, ctx->start);
+
+    DEBUG_LEAVE("visitExport_function");
     return 0;
 }
 
@@ -1150,6 +1465,49 @@ antlrcpp::Any AstBuilderInt::visitComponent_declaration(PSSParser::Component_dec
 	return 0;
 }
 
+antlrcpp::Any AstBuilderInt::visitComponent_body_compile_if(PSSParser::Component_body_compile_ifContext *ctx) {
+    int64_t cond = 0;
+    if (evalConstantExpression(ctx->cond, cond) && cond) {
+        visitCompileIfItem(ctx->true_body);
+    } else if (ctx->false_body) {
+        visitCompileIfItem(ctx->false_body);
+    }
+    return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitComponent_data_declaration(PSSParser::Component_data_declarationContext *ctx) {
+    DEBUG_ENTER("visitComponent_data_declaration");
+
+    m_field_depth++;
+    ctx->data_declaration()->accept(this);
+    m_field_depth--;
+
+    for (std::vector<ast::IField *>::const_iterator
+        it=m_fields.begin();
+        it!=m_fields.end(); it++) {
+        FieldAttr attr = (*it)->getAttr();
+
+        attr |= accessModifierToFieldAttr(ctx->access_modifier());
+
+        if (ctx->is_static) {
+            attr |= FieldAttr::Static;
+            attr |= FieldAttr::Const;
+        }
+        if (ctx->is_instance) {
+            attr |= FieldAttr::Instance;
+        }
+
+        (*it)->setAttr(attr);
+    }
+
+    if (!m_field_depth) {
+        m_fields.clear();
+    }
+
+    DEBUG_LEAVE("visitComponent_data_declaration");
+    return 0;
+}
+
 // Monitor declarations (PSS 3.0)
 
 antlrcpp::Any AstBuilderInt::visitMonitor_declaration(PSSParser::Monitor_declarationContext *ctx) {
@@ -1406,23 +1764,45 @@ antlrcpp::Any AstBuilderInt::visitActivity_action_traversal_stmt(PSSParser::Acti
 	ast::IActivityLabeledStmt *stmt = 0;
 	ast::IConstraintStmt *with_c = 0;
 
-	if (ctx->inline_constraints_or_empty()->constraint_set()) {
-		with_c = mkConstraintSet(ctx->inline_constraints_or_empty()->constraint_set());
+	PSSParser::Inline_constraints_or_emptyContext *with_ctx = 0;
+	if (ctx->action_handle_traversal_stmt()) {
+		with_ctx = ctx->action_handle_traversal_stmt()->inline_constraints_or_empty();
+	} else {
+		with_ctx = ctx->action_type_traversal_stmt()->inline_constraints_or_empty();
 	}
 
-	if (ctx->is_do) {
+	if (with_ctx->constraint_set()) {
+		with_c = mkConstraintSet(with_ctx->constraint_set());
+	}
+
+	if (ctx->action_type_traversal_stmt()) {
 		// By-type traversal
 		stmt = m_factory->mkActivityActionTypeTraversal(
-			mkDataTypeUserDefined(ctx->type_identifier()),
+			mkDataTypeUserDefined(ctx->action_type_traversal_stmt()->type_identifier()),
 			with_c);
+        PSSParser::Action_initializer_listContext *init_l =
+            ctx->action_type_traversal_stmt()->action_initializer_list();
+        if (init_l) {
+            std::vector<ast::IActionFieldInitializer *> inits = mkActionFieldInitializers(init_l);
+            ast::IActivityActionTypeTraversal *typed = dynamic_cast<ast::IActivityActionTypeTraversal *>(stmt);
+            for (std::vector<ast::IActionFieldInitializer *>::const_iterator
+                it=inits.begin();
+                it!=inits.end(); it++) {
+                typed->getInitializers().push_back(ast::IActionFieldInitializerUP(*it));
+            }
+        }
 	} else {
 		// Handle traversal
 		ast::IExprHierarchicalId *path = m_factory->mkExprHierarchicalId();
 		ast::IExprMemberPathElem *elem = m_factory->mkExprMemberPathElem(
-			mkId(ctx->identifier()),
+			mkId(ctx->action_handle_traversal_stmt()->identifier()),
 			0);
-        if (ctx->expression()) {
-            elem->getSubscript().push_back(ast::IExprUP(mkExpr(ctx->expression())));
+        std::vector<PSSParser::ExpressionContext *> subscripts =
+            ctx->action_handle_traversal_stmt()->expression();
+        for (std::vector<PSSParser::ExpressionContext *>::const_iterator
+            it=subscripts.begin();
+            it!=subscripts.end(); it++) {
+            elem->getSubscript().push_back(ast::IExprUP(mkExpr(*it)));
         }
 		path->getElems().push_back(ast::IExprMemberPathElemUP(elem));
 		ast::IExprRefPathContext *target = m_factory->mkExprRefPathContext(path);
@@ -1430,6 +1810,17 @@ antlrcpp::Any AstBuilderInt::visitActivity_action_traversal_stmt(PSSParser::Acti
 		stmt = m_factory->mkActivityActionHandleTraversal(
 			target,
 			with_c);
+        PSSParser::Action_initializer_listContext *init_l =
+            ctx->action_handle_traversal_stmt()->action_initializer_list();
+        if (init_l) {
+            std::vector<ast::IActionFieldInitializer *> inits = mkActionFieldInitializers(init_l);
+            ast::IActivityActionHandleTraversal *typed = dynamic_cast<ast::IActivityActionHandleTraversal *>(stmt);
+            for (std::vector<ast::IActionFieldInitializer *>::const_iterator
+                it=inits.begin();
+                it!=inits.end(); it++) {
+                typed->getInitializers().push_back(ast::IActionFieldInitializerUP(*it));
+            }
+        }
 	}
 
 	if (m_labeled_activity_id) {
@@ -1594,11 +1985,12 @@ antlrcpp::Any AstBuilderInt::visitData_declaration(PSSParser::Data_declarationCo
 		ast::IDataType *type = mkDataType(ctx->data_type());
 		ast::IExpr *init = 0;
 
-		if ((*it)->array_dim()) {
-		    ast::IExpr *array_dim = 0;
-            // Convert the type to array<type,expr>
-			array_dim = mkExpr((*it)->array_dim()->constant_expression()->expression());
-            type = mkDataTypeArray(type, array_dim);
+		if (!(*it)->array_dim().empty()) {
+		    // Convert the type to array<type,expr> for each dimension
+		    for (auto *dim : (*it)->array_dim()) {
+		        ast::IExpr *array_dim = mkExpr(dim->constant_expression()->expression());
+		        type = mkDataTypeArray(type, array_dim);
+		    }
 		}
 
 		if ((*it)->constant_expression()) {
@@ -1639,9 +2031,7 @@ antlrcpp::Any AstBuilderInt::visitAttr_field(PSSParser::Attr_fieldContext *ctx) 
 		it!=m_fields.end(); it++) {
 		FieldAttr attr = (*it)->getAttr();
 
-		if (ctx->access_modifier()) {
-
-		}
+		attr |= accessModifierToFieldAttr(ctx->access_modifier());
 
 		if (ctx->is_rand) {
 			attr |= FieldAttr::Rand;
@@ -1770,6 +2160,27 @@ antlrcpp::Any AstBuilderInt::visitEnum_declaration(PSSParser::Enum_declarationCo
 		decl->getItems().push_back(ast::IEnumItemUP(item));
 	}
 
+	// Pre-compute enum item indices for compile-time evaluation.
+	// Items may reference prior items (e.g. B = A + 1).
+	{
+		int64_t next_val = 0;
+		for (auto &item : decl->getItems()) {
+			if (item->getValue()) {
+				// Try evaluating the expression, resolving references
+				// to prior enum items within the same enum.
+				int64_t computed = 0;
+				if (evalEnumItemExpression(decl, item->getValue(), computed)) {
+					item->setIndex(computed);
+					next_val = computed + 1;
+				} else {
+					item->setIndex(next_val++);
+				}
+			} else {
+				item->setIndex(next_val++);
+			}
+		}
+	}
+
 	addChild(decl, ctx->start);
 
 	DEBUG_LEAVE("visitEnum_declaration");
@@ -1855,6 +2266,61 @@ antlrcpp::Any AstBuilderInt::visitConstraint_declaration(PSSParser::Constraint_d
 	return 0;
 }
 
+antlrcpp::Any AstBuilderInt::visitGeneric_constraint_bool(PSSParser::Generic_constraint_boolContext *ctx) {
+    DEBUG_ENTER("visitGeneric_constraint_bool");
+
+    ast::IGenericConstraintDeclBool *constraint = m_factory->mkGenericConstraintDeclBool(
+        ctx->identifier()->getText(),
+        false);
+    constraint->setIs_static(ctx->is_static);
+    setLoc(constraint, ctx->start);
+    addChild(constraint, ctx->start);
+
+    std::vector<ast::IGenericConstraintParam *> params =
+        mkGenericConstraintParams(ctx->generic_constraint_params());
+    for (std::vector<ast::IGenericConstraintParam *>::const_iterator
+        it=params.begin();
+        it!=params.end(); it++) {
+        constraint->getParameters().push_back(ast::IGenericConstraintParamUP(*it));
+    }
+
+    m_constraint_s.push_back(constraint);
+    ctx->constraint_set()->accept(this);
+    m_constraint_s.pop_back();
+
+    m_constraint = constraint;
+
+    DEBUG_LEAVE("visitGeneric_constraint_bool");
+    return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitGeneric_constraint_value(PSSParser::Generic_constraint_valueContext *ctx) {
+    DEBUG_ENTER("visitGeneric_constraint_value");
+
+    ast::IGenericConstraintDeclValue *constraint = m_factory->mkGenericConstraintDeclValue();
+    constraint->setIs_static(ctx->is_static);
+    constraint->setName(mkId(ctx->identifier()));
+    if (ctx->generic_constraint_data_type()->is_numeric) {
+        constraint->setIs_return_numeric(true);
+    } else {
+        constraint->setReturn_type(mkDataType(ctx->generic_constraint_data_type()->data_type()));
+    }
+    constraint->setExpr(mkExpr(ctx->expression_constraint_item()->expression()));
+    setLoc(constraint, ctx->start);
+    addChild(constraint, ctx->start);
+
+    std::vector<ast::IGenericConstraintParam *> params =
+        mkGenericConstraintParams(ctx->generic_constraint_params());
+    for (std::vector<ast::IGenericConstraintParam *>::const_iterator
+        it=params.begin();
+        it!=params.end(); it++) {
+        constraint->getParameters().push_back(ast::IGenericConstraintParamUP(*it));
+    }
+
+    DEBUG_LEAVE("visitGeneric_constraint_value");
+    return 0;
+}
+
 // antlrcpp::Any AstBuilderInt::visitConstraint_set(PSSParser::Constraint_setContext *ctx) {
 // 	DEBUG_ENTER("visitConstraint_set");
 
@@ -1896,6 +2362,16 @@ antlrcpp::Any AstBuilderInt::visitConstraint_block(PSSParser::Constraint_blockCo
 	return 0;
 }
 
+antlrcpp::Any AstBuilderInt::visitConstraint_body_compile_if(PSSParser::Constraint_body_compile_ifContext *ctx) {
+    int64_t cond = 0;
+    if (evalConstantExpression(ctx->constant_expression(), cond) && cond) {
+        visitCompileIfItem(ctx->constraint_body_compile_if_item(0));
+    } else if (ctx->constraint_body_compile_if_item().size() > 1) {
+        visitCompileIfItem(ctx->constraint_body_compile_if_item(1));
+    }
+    return 0;
+}
+
 antlrcpp::Any AstBuilderInt::visitDefault_constraint(PSSParser::Default_constraintContext *ctx) {
 	DEBUG_ENTER("visitDefault_constraint");
 	DEBUG("TODO");
@@ -1921,6 +2397,36 @@ antlrcpp::Any AstBuilderInt::visitExpression_constraint_item(PSSParser::Expressi
 	}
 	DEBUG_LEAVE("visitExpression_constraint_item");
 	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitProcedural_compile_if(PSSParser::Procedural_compile_ifContext *ctx) {
+    int64_t cond = 0;
+    if (evalConstantExpression(ctx->constant_expression(), cond) && cond) {
+        visitCompileIfItem(ctx->procedural_compile_if_stmt(0));
+    } else if (ctx->procedural_compile_if_stmt().size() > 1) {
+        visitCompileIfItem(ctx->procedural_compile_if_stmt(1));
+    }
+    return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitCovergroup_body_compile_if(PSSParser::Covergroup_body_compile_ifContext *ctx) {
+    int64_t cond = 0;
+    if (evalConstantExpression(ctx->constant_expression(), cond) && cond) {
+        visitCompileIfItem(ctx->covergroup_body_compile_if_item(0));
+    } else if (ctx->covergroup_body_compile_if_item().size() > 1) {
+        visitCompileIfItem(ctx->covergroup_body_compile_if_item(1));
+    }
+    return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitOverride_compile_if(PSSParser::Override_compile_ifContext *ctx) {
+    int64_t cond = 0;
+    if (evalConstantExpression(ctx->constant_expression(), cond) && cond) {
+        visitCompileIfItem(ctx->override_compile_if_stmt(0));
+    } else if (ctx->override_compile_if_stmt().size() > 1) {
+        visitCompileIfItem(ctx->override_compile_if_stmt(1));
+    }
+    return 0;
 }
 
 antlrcpp::Any AstBuilderInt::visitForeach_constraint_item(PSSParser::Foreach_constraint_itemContext *ctx) {
@@ -2238,6 +2744,11 @@ antlrcpp::Any AstBuilderInt::visitRef_path(PSSParser::Ref_pathContext *ctx) {
 
 	DEBUG_LEAVE("visitRef_path");
 	return 0;
+}
+
+antlrcpp::Any AstBuilderInt::visitCompile_has_expr(PSSParser::Compile_has_exprContext *ctx) {
+    m_expr = m_factory->mkExprCompileHas(0);
+    return 0;
 }
 
 antlrcpp::Any AstBuilderInt::visitCast_expression(PSSParser::Cast_expressionContext *ctx) {
@@ -2569,6 +3080,7 @@ void AstBuilderInt::addChild(ast::IScopeChild *c, Token *t, const ast::Location 
     c->setIndex(scope()->getChildren().size());
 	scope()->getChildren().push_back(ast::IScopeChildUP(c));
 	c->setParent(scope());
+    attachPendingAnnotations(c);
     if (loc) {
         c->setLocation(*loc);
     } else if (t) {
@@ -2589,6 +3101,7 @@ void AstBuilderInt::addChild(ast::ISymbolScope *c, Token *start, Token *end) {
     c->setIndex(scope()->getChildren().size());
 	scope()->getChildren().push_back(ast::IScopeChildUP(c));
 	c->setParent(scope());
+    attachPendingAnnotations(c);
     c->setLocation({
         m_file_id,
         (int32_t)start->getLine(),
@@ -2609,6 +3122,7 @@ void AstBuilderInt::addChild(ast::INamedScopeChild *c, Token *t) {
     c->setIndex(scope()->getChildren().size());
 	scope()->getChildren().push_back(ast::IScopeChildUP(c));
 	c->setParent(scope());
+    attachPendingAnnotations(c);
     c->setLocation({
         m_file_id,
         (int32_t)t->getLine(),
@@ -2632,6 +3146,7 @@ void AstBuilderInt::addChild(ast::IConstraintScope *c, Token *start, Token *end)
         (int32_t)end->getCharPositionInLine()+1
     });
 	c->setParent(scope());
+    attachPendingAnnotations(c);
     c->setIndex(scope()->getChildren().size());
 	scope()->getChildren().push_back(ast::IScopeChildUP(c));
 
@@ -2652,6 +3167,7 @@ void AstBuilderInt::addChild(ast::IExecScope *c, Token *start, Token *end) {
         (int32_t)end->getCharPositionInLine()+1
     });
     c->setParent(scope());
+    attachPendingAnnotations(c);
     c->setIndex(scope()->getChildren().size());
 	scope()->getChildren().push_back(ast::IScopeChildUP(c));
 
@@ -2672,6 +3188,7 @@ void AstBuilderInt::addChild(ast::IFunctionDefinition *c, Token *start, Token *e
         (int32_t)end->getCharPositionInLine()+1
     });
     c->setParent(scope());
+    attachPendingAnnotations(c);
     c->setIndex(scope()->getChildren().size());
 	scope()->getChildren().push_back(ast::IScopeChildUP(c));
 
@@ -2693,6 +3210,7 @@ void AstBuilderInt::addChild(ast::INamedScope *c, Token *start, Token *end) {
         (int32_t)end->getCharPositionInLine()+1
     });
     c->setParent(scope());
+    attachPendingAnnotations(c);
     DEBUG("Parent: %p", c->getParent());
     c->setIndex(scope()->getChildren().size());
 	scope()->getChildren().push_back(ast::IScopeChildUP(c));
@@ -2715,6 +3233,7 @@ void AstBuilderInt::addChild(ast::IScope *c, Token *start, Token *end) {
         (int32_t)end->getCharPositionInLine()
     });
     c->setParent(scope());
+    attachPendingAnnotations(c);
     c->setIndex(scope()->getChildren().size());
 	scope()->getChildren().push_back(ast::IScopeChildUP(c));
 
@@ -2785,6 +3304,17 @@ void AstBuilderInt::addDocstring(ast::IScopeChild *c, Token *t) {
 	}
 	 */
 	DEBUG_LEAVE("addDocstring");
+}
+
+void AstBuilderInt::attachPendingAnnotations(ast::IScopeChild *c) {
+    if (!m_pending_annotations.empty()) {
+        for (std::vector<ast::IAnnotation *>::const_iterator
+            it=m_pending_annotations.begin();
+            it!=m_pending_annotations.end(); it++) {
+            c->getAnnotations().push_back(ast::IAnnotationUP(*it));
+        }
+        m_pending_annotations.clear();
+    }
 }
 
 std::string AstBuilderInt::processDocStringMultiLineComment(
@@ -2880,7 +3410,713 @@ void AstBuilderInt::push_scope(ast::IScope *s) {
 
 void AstBuilderInt::pop_scope() { 
 	DEBUG("-- pop_scope");
+    if (!m_pending_annotations.empty()) {
+        DEBUG("Discarding %d pending annotations at scope pop",
+            (int)m_pending_annotations.size());
+        for (std::vector<ast::IAnnotation *>::const_iterator
+            it=m_pending_annotations.begin();
+            it!=m_pending_annotations.end(); it++) {
+            delete *it;
+        }
+        m_pending_annotations.clear();
+    }
 	m_scopes.pop_back(); 
+}
+
+bool AstBuilderInt::evalConstantExpression(PSSParser::Constant_expressionContext *ctx, int64_t &val) {
+    return evalExpression(ctx->expression(), val);
+}
+
+bool AstBuilderInt::evalExpression(PSSParser::ExpressionContext *ctx, int64_t &val) {
+    if (ctx->unary_op()) {
+        int64_t rhs = 0;
+        if (!evalExpression(ctx->lhs, rhs)) {
+            return false;
+        }
+        std::string op = ctx->unary_op()->getText();
+        if (op == "+") {
+            val = rhs;
+        } else if (op == "-") {
+            val = -rhs;
+        } else if (op == "!") {
+            val = !rhs;
+        } else if (op == "~") {
+            val = ~rhs;
+        } else {
+            return false;
+        }
+        return true;
+    } else if (ctx->lhs && ctx->rhs) {
+        int64_t lhs = 0, rhs = 0;
+        if (!evalExpression(ctx->lhs, lhs) || !evalExpression(ctx->rhs, rhs)) {
+            return false;
+        }
+        if (ctx->exp_op()) {
+            int64_t r = 1;
+            for (int64_t i=0; i<rhs; i++) {
+                r *= lhs;
+            }
+            val = r;
+        } else if (ctx->mul_div_mod_op()) {
+            std::string op = ctx->mul_div_mod_op()->getText();
+            if (op == "*") val = lhs * rhs;
+            else if (op == "/") val = rhs ? (lhs / rhs) : 0;
+            else val = rhs ? (lhs % rhs) : 0;
+        } else if (ctx->add_sub_op()) {
+            val = (ctx->add_sub_op()->getText() == "+") ? lhs + rhs : lhs - rhs;
+        } else if (ctx->shift_op()) {
+            val = (ctx->shift_op()->getText().find("<<") != std::string::npos) ? (lhs << rhs) : (lhs >> rhs);
+        } else if (ctx->logical_inequality_op()) {
+            std::string op = ctx->logical_inequality_op()->getText();
+            if (op == "<") val = lhs < rhs;
+            else if (op == "<=") val = lhs <= rhs;
+            else if (op == ">") val = lhs > rhs;
+            else val = lhs >= rhs;
+        } else if (ctx->eq_neq_op()) {
+            val = (ctx->eq_neq_op()->getText() == "==") ? (lhs == rhs) : (lhs != rhs);
+        } else if (ctx->binary_and_op()) {
+            val = lhs & rhs;
+        } else if (ctx->binary_xor_op()) {
+            val = lhs ^ rhs;
+        } else if (ctx->binary_or_op()) {
+            val = lhs | rhs;
+        } else if (ctx->logical_and_op()) {
+            val = (lhs && rhs);
+        } else if (ctx->logical_or_op()) {
+            val = (lhs || rhs);
+        } else {
+            return false;
+        }
+        return true;
+    } else if (ctx->lhs) {
+        if (ctx->conditional_expr()) {
+            int64_t cond = 0;
+            if (!evalExpression(ctx->lhs, cond)) {
+                return false;
+            }
+            return evalExpression(cond ? ctx->conditional_expr()->true_expr : ctx->conditional_expr()->false_expr, val);
+        } else {
+            return false;
+        }
+    } else if (ctx->primary()) {
+        if (ctx->primary()->bool_literal()) {
+            val = ctx->primary()->bool_literal()->TOK_TRUE() ? 1 : 0;
+            return true;
+        } else if (ctx->primary()->number()) {
+            std::string txt = ctx->primary()->number()->getText();
+            std::string norm;
+            for (char c : txt) {
+                if (c != '_') norm.push_back(c);
+            }
+            if (norm.rfind("0x", 0) == 0 || norm.rfind("0X", 0) == 0) {
+                val = strtoll(norm.c_str()+2, 0, 16);
+            } else if (norm.size() > 1 && norm[0] == '0') {
+                val = strtoll(norm.c_str()+1, 0, 8);
+            } else {
+                val = strtoll(norm.c_str(), 0, 10);
+            }
+            return true;
+        } else if (ctx->primary()->paren_expr()) {
+            return evalExpression(ctx->primary()->paren_expr()->expression(), val);
+        } else if (ctx->primary()->compile_has_expr()) {
+            val = evalCompileHas(ctx->primary()->compile_has_expr()->ref_path()) ? 1 : 0;
+            return true;
+        } else if (ctx->primary()->ref_path()) {
+            ast::IScopeChild *target = resolveRefPathTarget(ctx->primary()->ref_path());
+            return target ? evalScopeChildValue(target, val) : false;
+        } else if (ctx->primary()->cast_expression()) {
+            return evalExpression(ctx->primary()->cast_expression()->expression(), val);
+        }
+    }
+    return false;
+}
+
+bool AstBuilderInt::evalAstExpression(ast::IScope *eval_scope, ast::IExpr *expr, int64_t &val) {
+    if (!expr) {
+        return false;
+    }
+
+    if (ast::IExprBool *b = dynamic_cast<ast::IExprBool *>(expr)) {
+        val = b->getValue();
+        return true;
+    } else if (ast::IExprSignedNumber *n = dynamic_cast<ast::IExprSignedNumber *>(expr)) {
+        val = n->getValue();
+        return true;
+    } else if (ast::IExprUnsignedNumber *n = dynamic_cast<ast::IExprUnsignedNumber *>(expr)) {
+        val = n->getValue();
+        return true;
+    } else if (ast::IExprCast *c = dynamic_cast<ast::IExprCast *>(expr)) {
+        return evalAstExpression(eval_scope, c->getExpr(), val);
+    } else if (ast::IExprCond *c = dynamic_cast<ast::IExprCond *>(expr)) {
+        int64_t cond = 0;
+        if (!evalAstExpression(eval_scope, c->getCond_e(), cond)) {
+            return false;
+        }
+        return evalAstExpression(eval_scope, cond ? c->getTrue_e() : c->getFalse_e(), val);
+    } else if (ast::IExprCompileHas *h = dynamic_cast<ast::IExprCompileHas *>(expr)) {
+        if (!h->getRef()) {
+            return false;
+        }
+        val = resolveRefPathTarget(eval_scope, h->getRef()) ? 1 : 0;
+        return true;
+    } else if (ast::IExprRefPath *rp = dynamic_cast<ast::IExprRefPath *>(expr)) {
+        ast::IScopeChild *target = resolveRefPathTarget(eval_scope, rp);
+        return target ? evalScopeChildValue(target, val) : false;
+    } else if (ast::IExprBin *b = dynamic_cast<ast::IExprBin *>(expr)) {
+        int64_t lhs = 0, rhs = 0;
+        if (b->getOp() == ast::ExprBinOp::BinOp_Eq || b->getOp() == ast::ExprBinOp::BinOp_Ne) {
+            if (evalAstExpression(eval_scope, b->getLhs(), lhs) && evalAstExpression(eval_scope, b->getRhs(), rhs)) {
+                val = (b->getOp() == ast::ExprBinOp::BinOp_Eq) ? (lhs == rhs) : (lhs != rhs);
+                return true;
+            }
+
+            std::string lhs_s, rhs_s;
+            if (evalAstExpression(eval_scope, b->getLhs(), lhs_s) && evalAstExpression(eval_scope, b->getRhs(), rhs_s)) {
+                val = (b->getOp() == ast::ExprBinOp::BinOp_Eq) ? (lhs_s == rhs_s) : (lhs_s != rhs_s);
+                return true;
+            }
+            return false;
+        }
+
+        if (!evalAstExpression(eval_scope, b->getLhs(), lhs) || !evalAstExpression(eval_scope, b->getRhs(), rhs)) {
+            return false;
+        }
+
+        switch (b->getOp()) {
+            case ast::ExprBinOp::BinOp_Exp: {
+                int64_t r = 1;
+                for (int64_t i=0; i<rhs; i++) {
+                    r *= lhs;
+                }
+                val = r;
+            } break;
+            case ast::ExprBinOp::BinOp_Mul:
+                val = lhs * rhs;
+                break;
+            case ast::ExprBinOp::BinOp_Div:
+                val = rhs ? (lhs / rhs) : 0;
+                break;
+            case ast::ExprBinOp::BinOp_Mod:
+                val = rhs ? (lhs % rhs) : 0;
+                break;
+            case ast::ExprBinOp::BinOp_Add:
+                val = lhs + rhs;
+                break;
+            case ast::ExprBinOp::BinOp_Sub:
+                val = lhs - rhs;
+                break;
+            case ast::ExprBinOp::BinOp_Shl:
+                val = lhs << rhs;
+                break;
+            case ast::ExprBinOp::BinOp_Shr:
+                val = lhs >> rhs;
+                break;
+            case ast::ExprBinOp::BinOp_Lt:
+                val = lhs < rhs;
+                break;
+            case ast::ExprBinOp::BinOp_Le:
+                val = lhs <= rhs;
+                break;
+            case ast::ExprBinOp::BinOp_Gt:
+                val = lhs > rhs;
+                break;
+            case ast::ExprBinOp::BinOp_Ge:
+                val = lhs >= rhs;
+                break;
+            case ast::ExprBinOp::BinOp_BitAnd:
+                val = lhs & rhs;
+                break;
+            case ast::ExprBinOp::BinOp_BitXor:
+                val = lhs ^ rhs;
+                break;
+            case ast::ExprBinOp::BinOp_BitOr:
+                val = lhs | rhs;
+                break;
+            case ast::ExprBinOp::BinOp_LogAnd:
+                val = lhs && rhs;
+                break;
+            case ast::ExprBinOp::BinOp_LogOr:
+                val = lhs || rhs;
+                break;
+            default:
+                return false;
+        }
+        return true;
+    }
+
+    return false;
+}
+
+bool AstBuilderInt::evalAstExpression(ast::IScope *eval_scope, ast::IExpr *expr, std::string &val) {
+    if (!expr) {
+        return false;
+    }
+
+    if (ast::IExprString *s = dynamic_cast<ast::IExprString *>(expr)) {
+        val = s->getValue();
+        return true;
+    } else if (ast::IExprCast *c = dynamic_cast<ast::IExprCast *>(expr)) {
+        return evalAstExpression(eval_scope, c->getExpr(), val);
+    } else if (ast::IExprCond *c = dynamic_cast<ast::IExprCond *>(expr)) {
+        int64_t cond = 0;
+        if (!evalAstExpression(eval_scope, c->getCond_e(), cond)) {
+            return false;
+        }
+        return evalAstExpression(eval_scope, cond ? c->getTrue_e() : c->getFalse_e(), val);
+    } else if (ast::IExprRefPath *rp = dynamic_cast<ast::IExprRefPath *>(expr)) {
+        ast::IScopeChild *target = resolveRefPathTarget(eval_scope, rp);
+        return target ? evalScopeChildValue(target, val) : false;
+    }
+
+    return false;
+}
+
+bool AstBuilderInt::evalCompileHas(PSSParser::Ref_pathContext *ctx) {
+    return resolveRefPathTarget(ctx) != 0;
+}
+
+void AstBuilderInt::visitCompileIfItem(antlr4::ParserRuleContext *ctx) {
+    for (auto *c : ctx->children) {
+        c->accept(this);
+    }
+}
+
+ast::IScope *AstBuilderInt::getGlobalScope(ast::IScope *s) {
+    while (s && s->getParent()) {
+        s = s->getParent();
+    }
+    return s;
+}
+
+ast::IScopeChild *AstBuilderInt::findNamedChild(ast::IScope *scope, const std::string &name) {
+    if (!scope) {
+        return 0;
+    }
+    for (std::vector<ast::IScopeChildUP>::const_iterator
+        it=scope->getChildren().begin();
+        it!=scope->getChildren().end(); it++) {
+        ast::IPackageScope *pkg = dynamic_cast<ast::IPackageScope *>(it->get());
+        if (pkg && pkg->getId().size() && pkg->getId().back()->getId() == name) {
+            return it->get();
+        }
+        ast::INamedScope *ns = dynamic_cast<ast::INamedScope *>(it->get());
+        if (ns && ns->getName() && ns->getName()->getId() == name) {
+            return it->get();
+        }
+        ast::INamedScopeChild *nsc = dynamic_cast<ast::INamedScopeChild *>(it->get());
+        if (nsc && nsc->getName() && nsc->getName()->getId() == name) {
+            return it->get();
+        }
+    }
+    return 0;
+}
+
+ast::IScopeChild *AstBuilderInt::findNamedChildUp(ast::IScope *scope, const std::string &name) {
+    while (scope) {
+        ast::IScopeChild *ret = findNamedChild(scope, name);
+        if (ret) {
+            return ret;
+        }
+        scope = scope->getParent();
+    }
+    return 0;
+}
+
+ast::IScopeChild *AstBuilderInt::findPackagePath(
+        ast::IScope *scope,
+        const std::vector<std::string> &path,
+        uint32_t &consumed) {
+    consumed = 0;
+    if (!scope || path.empty()) {
+        return 0;
+    }
+
+    ast::IScopeChild *ret = 0;
+    for (std::vector<ast::IScopeChildUP>::const_iterator
+        it=scope->getChildren().begin();
+        it!=scope->getChildren().end(); it++) {
+        ast::IPackageScope *pkg = dynamic_cast<ast::IPackageScope *>(it->get());
+        if (!pkg || pkg->getId().size() == 0 || pkg->getId().size() > path.size()) {
+            continue;
+        }
+
+        bool match = true;
+        for (uint32_t i=0; i<pkg->getId().size(); i++) {
+            if (pkg->getId().at(i)->getId() != path.at(i)) {
+                match = false;
+                break;
+            }
+        }
+
+        if (match && pkg->getId().size() > consumed) {
+            consumed = pkg->getId().size();
+            ret = it->get();
+        }
+    }
+
+    return ret;
+}
+
+static bool appendTypeIdentifierPath(
+        std::vector<std::string> &path,
+        ast::ITypeIdentifier *type_id) {
+    if (!type_id || !type_id->getElems().size()) {
+        return false;
+    }
+
+    for (uint32_t i=0; i<type_id->getElems().size(); i++) {
+        ast::ITypeIdentifierElem *elem = type_id->getElems().at(i).get();
+        if (!elem || !elem->getId() || elem->getParams()) {
+            return false;
+        }
+        path.push_back(elem->getId()->getId());
+    }
+
+    return !path.empty();
+}
+
+ast::IScope *AstBuilderInt::resolveDataTypeScope(ast::IDataType *type) {
+    ast::IDataTypeUserDefined *ud = dynamic_cast<ast::IDataTypeUserDefined *>(type);
+    if (!ud || !ud->getType_id() || !ud->getType_id()->getElems().size()) {
+        return 0;
+    }
+    ast::IScope *start = scope();
+    ast::IScopeChild *target = 0;
+    for (uint32_t i=0; i<ud->getType_id()->getElems().size(); i++) {
+        std::string elem = ud->getType_id()->getElems().at(i).get()->getId()->getId();
+        if (i == 0) {
+            target = ud->getIs_global() ? findNamedChild(getGlobalScope(start), elem) : findNamedChildUp(start, elem);
+        } else {
+            ast::IScope *scope_t = dynamic_cast<ast::IScope *>(target);
+            target = findNamedChild(scope_t, elem);
+        }
+        if (!target) {
+            return 0;
+        }
+    }
+    return dynamic_cast<ast::IScope *>(target);
+}
+
+ast::IScopeChild *AstBuilderInt::findImportedPathTarget(
+        ast::IScope *start,
+        const std::vector<std::string> &path) {
+    if (!start || path.empty()) {
+        return 0;
+    }
+
+    ast::IScopeChild *ret = 0;
+    for (ast::IScope *scope_it = start; scope_it; scope_it = scope_it->getParent()) {
+        for (std::vector<ast::IScopeChildUP>::const_iterator
+            it=scope_it->getChildren().begin();
+            it!=scope_it->getChildren().end(); it++) {
+            ast::IPackageImportStmt *imp = dynamic_cast<ast::IPackageImportStmt *>(it->get());
+            if (!imp || !imp->getPath()) {
+                continue;
+            }
+
+            std::vector<std::string> candidate_path;
+            if (!appendTypeIdentifierPath(candidate_path, imp->getPath())) {
+                continue;
+            }
+
+            if (imp->getAlias()) {
+                if (path.at(0) != imp->getAlias()->getId()) {
+                    continue;
+                }
+                candidate_path.insert(candidate_path.end(), path.begin()+1, path.end());
+            } else if (imp->getWildcard()) {
+                candidate_path.insert(candidate_path.end(), path.begin(), path.end());
+            } else {
+                if (candidate_path.back() != path.at(0)) {
+                    continue;
+                }
+                candidate_path.insert(candidate_path.end(), path.begin()+1, path.end());
+            }
+
+            ast::IScopeChild *target = resolvePathTarget(
+                scope_it,
+                candidate_path,
+                false,
+                false);
+            if (!target) {
+                continue;
+            }
+
+            if (ret && ret != target) {
+                return 0;
+            }
+            ret = target;
+        }
+    }
+
+    return ret;
+}
+
+ast::IScopeChild *AstBuilderInt::resolvePathTarget(
+        ast::IScope *start,
+        const std::vector<std::string> &path,
+        bool is_global,
+        bool search_imports) {
+    if (path.empty()) {
+        return 0;
+    }
+
+    ast::IScope *start_scope = start ? start : scope();
+    ast::IScope *global_scope = getGlobalScope(start_scope);
+    ast::IScopeChild *target = 0;
+    uint32_t path_i = 1;
+
+
+    if (is_global) {
+        target = findPackagePath(global_scope, path, path_i);
+        if (!target) {
+            target = findNamedChild(global_scope, path.at(0));
+            path_i = 1;
+        }
+    } else {
+        target = findNamedChildUp(start_scope, path.at(0));
+        if (!target) {
+            if (search_imports) {
+                target = findImportedPathTarget(start_scope, path);
+                if (target) {
+                    // findImportedPathTarget fully resolves the path
+                    return target;
+                }
+            }
+        }
+        if (!target) {
+            target = findPackagePath(global_scope, path, path_i);
+        } else {
+            path_i = 1;
+        }
+    }
+
+    if (!target) {
+        return 0;
+    }
+
+    for (; path_i<path.size(); path_i++) {
+        // Handle enum item lookup: IEnumDecl is not a scope
+        if (ast::IEnumDecl *edecl = dynamic_cast<ast::IEnumDecl *>(target)) {
+            target = 0;
+            for (auto &item : edecl->getItems()) {
+                if (item->getName() && item->getName()->getId() == path.at(path_i)) {
+                    target = item.get();
+                    break;
+                }
+            }
+            if (!target) return 0;
+            continue;
+        }
+        ast::IScope *scope_t = dynamic_cast<ast::IScope *>(target);
+        if (!scope_t) {
+            if (ast::IField *f = dynamic_cast<ast::IField *>(target)) {
+                scope_t = resolveDataTypeScope(f->getType());
+            } else if (ast::IActionHandleField *f = dynamic_cast<ast::IActionHandleField *>(target)) {
+                scope_t = resolveDataTypeScope(f->getType());
+            } else if (ast::IFieldCompRef *f = dynamic_cast<ast::IFieldCompRef *>(target)) {
+                scope_t = resolveDataTypeScope(f->getType());
+            } else if (ast::IFieldRef *f = dynamic_cast<ast::IFieldRef *>(target)) {
+                scope_t = resolveDataTypeScope(f->getType());
+            } else if (ast::IFieldClaim *f = dynamic_cast<ast::IFieldClaim *>(target)) {
+                scope_t = resolveDataTypeScope(f->getType());
+            }
+        }
+        if (!scope_t) {
+            return 0;
+        }
+        target = findNamedChild(scope_t, path.at(path_i));
+        if (!target) {
+            return 0;
+        }
+    }
+
+    return target;
+}
+
+ast::IScopeChild *AstBuilderInt::resolveRefPathTarget(PSSParser::Ref_pathContext *ctx) {
+    std::vector<std::string> path;
+    bool is_global = false;
+
+    if (ctx->static_ref_path()) {
+        is_global = ctx->static_ref_path()->static_ref_path_prefix()->is_global;
+        // Include the prefix element (first path segment before ::)
+        if (!is_global && ctx->static_ref_path()->static_ref_path_prefix()->type_identifier_elem()) {
+            path.push_back(ctx->static_ref_path()->static_ref_path_prefix()->type_identifier_elem()->identifier()->getText());
+        }
+        std::vector<PSSParser::Type_identifier_elemContext *> elems = ctx->static_ref_path()->type_identifier_elem();
+        for (auto *e : elems) {
+            path.push_back(e->identifier()->getText());
+        }
+        path.push_back(ctx->static_ref_path()->member_path_elem()->identifier()->getText());
+        if (ctx->hierarchical_id()) {
+            for (auto *e : ctx->hierarchical_id()->member_path_elem()) {
+                path.push_back(e->identifier()->getText());
+            }
+        }
+    } else {
+        for (auto *e : ctx->hierarchical_id()->member_path_elem()) {
+            path.push_back(e->identifier()->getText());
+        }
+    }
+
+    if (path.empty()) {
+        return 0;
+    }
+
+    return resolvePathTarget(scope(), path, is_global);
+}
+
+static bool appendHierarchicalIdPath(
+        std::vector<std::string> &path,
+        ast::IExprHierarchicalId *hier_id) {
+    if (!hier_id) {
+        return false;
+    }
+
+    for (std::vector<ast::IExprMemberPathElemUP>::const_iterator
+        it=hier_id->getElems().begin();
+        it!=hier_id->getElems().end(); it++) {
+        if (!(*it)->getId() || (*it)->getParams() || (*it)->getSubscript().size()) {
+            return false;
+        }
+        path.push_back((*it)->getId()->getId());
+    }
+
+    return !path.empty();
+}
+
+static bool appendStaticRefPath(
+        std::vector<std::string> &path,
+        ast::IExprRefPathStatic *ref) {
+    if (!ref) {
+        return false;
+    }
+
+    for (std::vector<ast::ITypeIdentifierElemUP>::const_iterator
+        it=ref->getBase().begin();
+        it!=ref->getBase().end(); it++) {
+        if (!(*it)->getId() || (*it)->getParams()) {
+            return false;
+        }
+        path.push_back((*it)->getId()->getId());
+    }
+
+    return !path.empty();
+}
+
+ast::IScopeChild *AstBuilderInt::resolveRefPathTarget(
+        ast::IScope *eval_scope,
+        ast::IExprRefPath *expr) {
+    if (!expr) {
+        return 0;
+    }
+
+    std::vector<std::string> path;
+    bool is_global = false;
+    ast::IScope *start_scope = eval_scope ? eval_scope : scope();
+
+    if (ast::IExprRefPathStaticRooted *rooted = dynamic_cast<ast::IExprRefPathStaticRooted *>(expr)) {
+        is_global = rooted->getRoot()->getIs_global();
+        if (!appendStaticRefPath(path, rooted->getRoot()) || !appendHierarchicalIdPath(path, rooted->getLeaf())) {
+            return 0;
+        }
+    } else if (ast::IExprRefPathStatic *static_ref = dynamic_cast<ast::IExprRefPathStatic *>(expr)) {
+        is_global = static_ref->getIs_global();
+        if (!appendStaticRefPath(path, static_ref)) {
+            return 0;
+        }
+    } else if (ast::IExprRefPathContext *context_ref = dynamic_cast<ast::IExprRefPathContext *>(expr)) {
+        if (context_ref->getIs_super() && start_scope) {
+            start_scope = start_scope->getParent();
+        }
+        if (!appendHierarchicalIdPath(path, context_ref->getHier_id())) {
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+
+    for (size_t pi=0; pi<path.size(); pi++) {
+    }
+    return resolvePathTarget(start_scope, path, is_global);
+}
+
+bool AstBuilderInt::evalEnumItemExpression(
+        ast::IEnumDecl *decl,
+        ast::IExpr *expr,
+        int64_t &val) {
+    if (!expr) return false;
+
+    // Try standard eval first with the enclosing scope
+    if (evalAstExpression(scope(), expr, val)) {
+        return true;
+    }
+
+    // Handle binary expressions with enum item references
+    if (ast::IExprBin *b = dynamic_cast<ast::IExprBin *>(expr)) {
+        int64_t lhs = 0, rhs = 0;
+        if (!evalEnumItemExpression(decl, b->getLhs(), lhs) ||
+            !evalEnumItemExpression(decl, b->getRhs(), rhs)) {
+            return false;
+        }
+        switch (b->getOp()) {
+            case ast::ExprBinOp::BinOp_Add: val = lhs + rhs; return true;
+            case ast::ExprBinOp::BinOp_Sub: val = lhs - rhs; return true;
+            case ast::ExprBinOp::BinOp_Mul: val = lhs * rhs; return true;
+            case ast::ExprBinOp::BinOp_Div: val = rhs ? (lhs / rhs) : 0; return true;
+            case ast::ExprBinOp::BinOp_Mod: val = rhs ? (lhs % rhs) : 0; return true;
+            case ast::ExprBinOp::BinOp_Shl: val = lhs << rhs; return true;
+            case ast::ExprBinOp::BinOp_Shr: val = lhs >> rhs; return true;
+            case ast::ExprBinOp::BinOp_BitAnd: val = lhs & rhs; return true;
+            case ast::ExprBinOp::BinOp_BitOr: val = lhs | rhs; return true;
+            case ast::ExprBinOp::BinOp_BitXor: val = lhs ^ rhs; return true;
+            default: return false;
+        }
+    }
+
+    // Check if the expression is a reference to another enum item
+    if (ast::IExprRefPathContext *rp = dynamic_cast<ast::IExprRefPathContext *>(expr)) {
+        if (rp->getHier_id() && rp->getHier_id()->getElems().size() == 1) {
+            std::string name = rp->getHier_id()->getElems().at(0)->getId()->getId();
+            for (auto &item : decl->getItems()) {
+                if (item->getName() && item->getName()->getId() == name) {
+                    if (item->getIndex() >= 0) {
+                        val = item->getIndex();
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+bool AstBuilderInt::evalScopeChildValue(ast::IScopeChild *target, int64_t &val) {
+    if (ast::IField *f = dynamic_cast<ast::IField *>(target)) {
+        if (f->getInit()) {
+            return evalAstExpression(f->getParent(), f->getInit(), val);
+        }
+    } else if (ast::IEnumItem *e = dynamic_cast<ast::IEnumItem *>(target)) {
+        // Prefer pre-computed index (set during enum declaration)
+        if (e->getIndex() >= 0) {
+            val = e->getIndex();
+            return true;
+        } else if (e->getValue()) {
+            return evalAstExpression(e->getParent(), e->getValue(), val);
+        }
+    }
+    return false;
+}
+
+bool AstBuilderInt::evalScopeChildValue(ast::IScopeChild *target, std::string &val) {
+    if (ast::IField *f = dynamic_cast<ast::IField *>(target)) {
+        if (f->getInit()) {
+            return evalAstExpression(f->getParent(), f->getInit(), val);
+        }
+    }
+    return false;
 }
 
 ast::IActivityJoinSpec *AstBuilderInt::mkActivityJoinSpec(PSSParser::Activity_join_specContext *ctx) {
@@ -2914,6 +4150,33 @@ ast::IConstraintStmt *AstBuilderInt::mkConstraintSet(PSSParser::Constraint_setCo
 	m_constraint = 0;
 	ctx->accept(this);
 	return m_constraint;
+}
+
+std::vector<ast::IGenericConstraintParam *> AstBuilderInt::mkGenericConstraintParams(
+        PSSParser::Generic_constraint_paramsContext *ctx) {
+    std::vector<ast::IGenericConstraintParam *> ret;
+
+    if (!ctx) {
+        return ret;
+    }
+
+    std::vector<PSSParser::Generic_constraint_paramContext *> params = ctx->generic_constraint_param();
+    for (std::vector<PSSParser::Generic_constraint_paramContext *>::const_iterator
+        it=params.begin();
+        it!=params.end(); it++) {
+        bool is_numeric = (*it)->generic_constraint_data_type()->is_numeric;
+        ast::IDataType *type = 0;
+        if (!is_numeric) {
+            type = mkDataType((*it)->generic_constraint_data_type()->data_type());
+        }
+        ret.push_back(m_factory->mkGenericConstraintParam(
+            mkId((*it)->identifier()),
+            (*it)->is_const,
+            is_numeric,
+            type));
+    }
+
+    return ret;
 }
 
 ast::IDataType *AstBuilderInt::mkDataType(PSSParser::Data_typeContext *ctx) {
@@ -3175,6 +4438,26 @@ ast::IFunctionParamDecl *AstBuilderInt::mkFunctionParamDecl(PSSParser::Function_
         dflt);
 
     DEBUG_LEAVE("mkFunctionParamDecl");
+    return ret;
+}
+
+std::vector<ast::IActionFieldInitializer *> AstBuilderInt::mkActionFieldInitializers(
+        PSSParser::Action_initializer_listContext *ctx) {
+    std::vector<ast::IActionFieldInitializer *> ret;
+
+    if (!ctx) {
+        return ret;
+    }
+
+    std::vector<PSSParser::Action_initializerContext *> inits = ctx->action_initializer();
+    for (std::vector<PSSParser::Action_initializerContext *>::const_iterator
+        it=inits.begin();
+        it!=inits.end(); it++) {
+        ret.push_back(m_factory->mkActionFieldInitializer(
+            mkHierarchicalId((*it)->hierarchical_id()),
+            mkExpr((*it)->expression())));
+    }
+
     return ret;
 }
 

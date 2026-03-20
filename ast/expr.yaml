@@ -762,7 +762,7 @@ classes:
           - is_super:
               type: bool
               is_ctor: false 
-            init: false
+              init: false
           - hier_id: "UP<ExprHierarchicalId>"
           - slice: 
               type: UP<ExprBitSlice>

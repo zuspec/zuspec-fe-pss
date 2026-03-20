@@ -6,6 +6,7 @@ flags:
     - Rand        # Random field (subject to constraints)
     - Const       # Constant field
     - Static      # Static field (shared across instances)
+    - Instance    # Component instance-qualified field
     - Private     # Private field (not visible outside)
     - Protected   # Protected field (visible in subclasses)
 
@@ -122,3 +123,16 @@ classes:
       data:
       - type: UP<DataTypeUserDefined>
       - is_lock: bool
+  - ActionHandleField:
+      super: NamedScopeChild
+      doc: |
+          Action handle field declaration.
+
+          Represents an action instance field declared in an action or monitor
+          body, including optional PSS 3.1 initializer assignments and support
+          for array-typed handles.
+      data:
+      - type: UP<DataType>
+      - initializers:
+          type: list<UP<ActionFieldInitializer>>
+          is_ctor: false

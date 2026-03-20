@@ -280,6 +280,15 @@ classes:
       data:
         - proto: UP<FunctionPrototype>
 
+  - ExportFunction:
+      super: ScopeChild
+      doc: |
+          Exported target function declaration.
+
+          Represents a PSS 3.1 ``export target function name;`` declaration.
+      data:
+        - plat: PlatQual
+        - name: UP<ExprId>
 
 
 

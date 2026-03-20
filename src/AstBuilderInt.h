@@ -17,6 +17,7 @@
 #include "zsp/ast/IFactory.h"
 #include "zsp/ast/IGlobalScope.h"
 #include "zsp/ast/IScope.h"
+#include "zsp/ast/IEnumDecl.h"
 
 using namespace antlr4;
 using namespace antlrcpp;
@@ -75,13 +76,25 @@ public:
 	// B.1 package declaration
 	virtual antlrcpp::Any visitPackage_declaration(PSSParser::Package_declarationContext *ctx) override;
 
+    virtual antlrcpp::Any visitPackage_body_compile_if(PSSParser::Package_body_compile_ifContext *ctx) override;
+
+    virtual antlrcpp::Any visitAnnotation_body_compile_if(PSSParser::Annotation_body_compile_ifContext *ctx) override;
+
+    virtual antlrcpp::Any visitCompile_assert_stmt(PSSParser::Compile_assert_stmtContext *ctx) override;
+
 	virtual antlrcpp::Any visitImport_stmt(PSSParser::Import_stmtContext *ctx) override;
 
-    virtual antlrcpp::Any visitPyimport_single_module(PSSParser::Pyimport_single_moduleContext *ctx) override;
+	virtual antlrcpp::Any visitPyimport_single_module(PSSParser::Pyimport_single_moduleContext *ctx) override;
 
     virtual antlrcpp::Any visitPyimport_from_module(PSSParser::Pyimport_from_moduleContext *ctx) override;
 
 	virtual antlrcpp::Any visitExtend_stmt(PSSParser::Extend_stmtContext *ctx) override;
+
+	virtual antlrcpp::Any visitAnnotation_declaration(PSSParser::Annotation_declarationContext *ctx) override;
+
+	virtual antlrcpp::Any visitAnnotation_attr_field(PSSParser::Annotation_attr_fieldContext *ctx) override;
+
+	virtual antlrcpp::Any visitAnnotation(PSSParser::AnnotationContext *ctx) override;
 
 	virtual antlrcpp::Any visitConst_field_declaration(PSSParser::Const_field_declarationContext *ctx) override;
 
@@ -91,18 +104,26 @@ public:
 
 	virtual antlrcpp::Any visitAbstract_action_declaration(PSSParser::Abstract_action_declarationContext *ctx);
 
+    virtual antlrcpp::Any visitOverride_action_declaration(PSSParser::Override_action_declarationContext *ctx) override;
+
     virtual antlrcpp::Any visitActivity_bind_stmt(PSSParser::Activity_bind_stmtContext *ctx) override;
 
     virtual antlrcpp::Any visitActivity_declaration(PSSParser::Activity_declarationContext *ctx) override;
+
+    virtual antlrcpp::Any visitAction_body_compile_if(PSSParser::Action_body_compile_ifContext *ctx) override;
 
 	virtual antlrcpp::Any visitFlow_ref_field_declaration(PSSParser::Flow_ref_field_declarationContext *ctx) override;
 	
 	virtual antlrcpp::Any visitResource_ref_field_declaration(PSSParser::Resource_ref_field_declarationContext *ctx) override;
 
+    virtual antlrcpp::Any visitAction_handle_declaration(PSSParser::Action_handle_declarationContext *ctx) override;
+
 	virtual antlrcpp::Any visitActivity_data_field(PSSParser::Activity_data_fieldContext *ctx) override;
 
 	// B.3 Struct declarations
 	virtual antlrcpp::Any visitStruct_declaration(PSSParser::Struct_declarationContext *ctx) override;
+
+    virtual antlrcpp::Any visitStruct_body_compile_if(PSSParser::Struct_body_compile_ifContext *ctx) override;
 
 	// B.4 Exec blocks
     virtual antlrcpp::Any visitExec_block(PSSParser::Exec_blockContext *ctx) override;
@@ -121,6 +142,8 @@ public:
     virtual antlrcpp::Any visitFunction_prototype(PSSParser::Function_prototypeContext *ctx) override;
 
     virtual antlrcpp::Any visitImport_function(PSSParser::Import_functionContext *ctx) override;
+
+    virtual antlrcpp::Any visitExport_function(PSSParser::Export_functionContext *ctx) override;
 
 	// B.7 Procedural Statements
     virtual antlrcpp::Any visitProcedural_sequence_block_stmt(PSSParser::Procedural_sequence_block_stmtContext *ctx) override;
@@ -152,6 +175,12 @@ public:
 	// B.8 Component declarations
 
 	virtual antlrcpp::Any visitComponent_declaration(PSSParser::Component_declarationContext *ctx) override;
+
+    virtual antlrcpp::Any visitComponent_data_declaration(PSSParser::Component_data_declarationContext *ctx) override;
+
+	virtual antlrcpp::Any visitComponent_body_compile_if(PSSParser::Component_body_compile_ifContext *ctx) override;
+
+    virtual antlrcpp::Any visitMonitor_body_compile_if(PSSParser::Monitor_body_compile_ifContext *ctx) override;
 
 	// Monitor declarations (PSS 3.0)
 	virtual antlrcpp::Any visitMonitor_declaration(PSSParser::Monitor_declarationContext *ctx) override;
@@ -219,15 +248,27 @@ public:
 	// B.14 Constraints
 	virtual antlrcpp::Any visitConstraint_declaration(PSSParser::Constraint_declarationContext *ctx) override;
 
+    virtual antlrcpp::Any visitGeneric_constraint_bool(PSSParser::Generic_constraint_boolContext *ctx) override;
+
+    virtual antlrcpp::Any visitGeneric_constraint_value(PSSParser::Generic_constraint_valueContext *ctx) override;
+
 //	virtual antlrcpp::Any visitConstraint_set(PSSParser::Constraint_setContext *ctx) override;
 
 	virtual antlrcpp::Any visitConstraint_block(PSSParser::Constraint_blockContext *ctx) override;
+
+    virtual antlrcpp::Any visitConstraint_body_compile_if(PSSParser::Constraint_body_compile_ifContext *ctx) override;
 
 	virtual antlrcpp::Any visitDefault_constraint(PSSParser::Default_constraintContext *ctx) override;
 
 	virtual antlrcpp::Any visitDefault_disable_constraint(PSSParser::Default_disable_constraintContext *ctx) override;
 
 	virtual antlrcpp::Any visitExpression_constraint_item(PSSParser::Expression_constraint_itemContext *ctx) override;
+
+    virtual antlrcpp::Any visitProcedural_compile_if(PSSParser::Procedural_compile_ifContext *ctx) override;
+
+    virtual antlrcpp::Any visitCovergroup_body_compile_if(PSSParser::Covergroup_body_compile_ifContext *ctx) override;
+
+    virtual antlrcpp::Any visitOverride_compile_if(PSSParser::Override_compile_ifContext *ctx) override;
 
 	virtual antlrcpp::Any visitForeach_constraint_item(PSSParser::Foreach_constraint_itemContext *ctx) override;
 
@@ -254,6 +295,8 @@ public:
 	virtual antlrcpp::Any visitCast_expression(PSSParser::Cast_expressionContext *ctx) override;
 
 	virtual antlrcpp::Any visitRef_path(PSSParser::Ref_pathContext *ctx) override;
+
+    virtual antlrcpp::Any visitCompile_has_expr(PSSParser::Compile_has_exprContext *ctx) override;
 
 	// B.18 Identifiers
 	virtual antlrcpp::Any visitIdentifier(PSSParser::IdentifierContext *ctx) override;
@@ -303,6 +346,52 @@ private:
 
     void addDocstring(ast::IScopeChild *c, Token *t);
 
+    void attachPendingAnnotations(ast::IScopeChild *c);
+
+    bool evalConstantExpression(PSSParser::Constant_expressionContext *ctx, int64_t &val);
+
+    bool evalExpression(PSSParser::ExpressionContext *ctx, int64_t &val);
+
+    bool evalAstExpression(ast::IScope *eval_scope, ast::IExpr *expr, int64_t &val);
+
+    bool evalAstExpression(ast::IScope *eval_scope, ast::IExpr *expr, std::string &val);
+
+    bool evalCompileHas(PSSParser::Ref_pathContext *ctx);
+
+    void visitCompileIfItem(antlr4::ParserRuleContext *ctx);
+
+    ast::IScope *getGlobalScope(ast::IScope *s);
+
+    ast::IScopeChild *findNamedChild(ast::IScope *scope, const std::string &name);
+
+    ast::IScopeChild *findNamedChildUp(ast::IScope *scope, const std::string &name);
+
+    ast::IScopeChild *findPackagePath(
+        ast::IScope *scope,
+        const std::vector<std::string> &path,
+        uint32_t &consumed);
+
+    ast::IScope *resolveDataTypeScope(ast::IDataType *type);
+
+    ast::IScopeChild *findImportedPathTarget(
+        ast::IScope *start,
+        const std::vector<std::string> &path);
+
+    ast::IScopeChild *resolvePathTarget(
+        ast::IScope *start,
+        const std::vector<std::string> &path,
+        bool is_global,
+        bool search_imports=true);
+
+    ast::IScopeChild *resolveRefPathTarget(PSSParser::Ref_pathContext *ctx);
+
+    ast::IScopeChild *resolveRefPathTarget(ast::IScope *eval_scope, ast::IExprRefPath *expr);
+
+    bool evalEnumItemExpression(ast::IEnumDecl *decl, ast::IExpr *expr, int64_t &val);
+    bool evalScopeChildValue(ast::IScopeChild *target, int64_t &val);
+
+    bool evalScopeChildValue(ast::IScopeChild *target, std::string &val);
+
     std::string processDocStringMultiLineComment(
     		const std::vector<Token *>		&mlc_tokens,
 			const std::vector<Token *>		&ws_tokens);
@@ -327,6 +416,9 @@ private:
 
 	ast::IConstraintStmt *mkConstraintSet(PSSParser::Constraint_setContext *ctx);
 
+    std::vector<ast::IGenericConstraintParam *> mkGenericConstraintParams(
+        PSSParser::Generic_constraint_paramsContext *ctx);
+
 	ast::IDataType *mkDataType(PSSParser::Data_typeContext *ctx);
 
 	ast::IDataTypeUserDefined *mkDataTypeUserDefined(PSSParser::Type_identifierContext *ctx);
@@ -350,6 +442,9 @@ private:
     ast::IFunctionPrototype *mkFunctionPrototype(PSSParser::Function_prototypeContext *ctx);
 
     ast::IFunctionParamDecl *mkFunctionParamDecl(PSSParser::Function_parameterContext *ctx);
+
+    std::vector<ast::IActionFieldInitializer *> mkActionFieldInitializers(
+        PSSParser::Action_initializer_listContext    *ctx);
 
 	ast::IExprId *mkId(PSSParser::IdentifierContext *ctx);
 
@@ -422,6 +517,7 @@ private:
 	std::vector<ast::IExprIdUP>					*m_type_id;
 	uint32_t									m_field_depth;
 	std::vector<ast::IField *>					m_fields;
+    std::vector<ast::IAnnotation *>            m_pending_annotations;
 
 };
 

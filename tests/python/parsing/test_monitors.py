@@ -354,9 +354,9 @@ def test_scalability_nested_monitors(nesting_depth):
     """Test deeply nested monitor hierarchies."""
     def generate_monitors(depth, current=0):
         if current >= depth:
-            return """        monitor Monitor0 {
+            return f"""        monitor Monitor{current} {{
             A a;
-        }"""
+        }}"""
         
         inner = generate_monitors(depth, current + 1)
         return f"""        monitor Monitor{current} {{

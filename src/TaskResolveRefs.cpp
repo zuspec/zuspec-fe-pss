@@ -25,6 +25,9 @@
 #include "TaskResolveImports.h"
 #include "TaskResolveRef.h"
 #include "TaskResolveRefs.h"
+#include "zsp/ast/IGenericConstraintDeclBool.h"
+#include "zsp/ast/IGenericConstraintDeclValue.h"
+#include "zsp/ast/IGenericConstraintParam.h"
 #include "TaskSpecializeParameterizedRef.h"
 #include "zsp/parser/impl/TaskResolveSymbolPathRef.h"
 #include "zsp/parser/impl/TaskGetElemSymbolScope.h"
@@ -223,13 +226,24 @@ void TaskResolveRefs::visitActivityActionHandleTraversal(ast::IActivityActionHan
 
     ast::IField *field = dynamic_cast<ast::IField *>(target);
     DEBUG("target=%p field=%p", target, field);
+    if (!field) {
+        DEBUG("Failed to resolve traversal target to a field");
+        DEBUG_LEAVE("visitActivityActionHandleTraversal");
+        return;
+    }
     DEBUG("field: %s", field->getName()->getId().c_str());
     ast::IDataType *field_t = field->getType();
     ast::IDataTypeUserDefined *field_udt = dynamic_cast<ast::IDataTypeUserDefined *>(field_t);
 
     DEBUG("field_t=%p action_t=%p", field_t, field_udt);
-    ast::IScopeChild *field_c = resolvePath(field_udt->getType_id()->getTarget());
+    ast::IScopeChild *field_c = (field_udt && field_udt->getType_id() && field_udt->getType_id()->getTarget())
+        ? resolvePath(field_udt->getType_id()->getTarget()) : 0;
     ast::ISymbolScope *field_scope = dynamic_cast<ast::ISymbolScope *>(field_c);
+    if (!field_scope) {
+        DEBUG("Failed to resolve field type scope");
+        DEBUG_LEAVE("visitActivityActionHandleTraversal");
+        return;
+    }
     DEBUG("field_c=%p field_scope=%s", field_c, field_scope->getName().c_str());
     if (i->getWith_c()) {
         m_ctxt->symtab()->pushScope(field_scope, ast::SymbolRefPathElemKind::ElemKind_Inline);
@@ -310,6 +324,14 @@ void TaskResolveRefs::visitExprRefPathContext(ast::IExprRefPathContext *i) {
 
     if (!target) {
         const std::string &name = i->getHier_id()->getElems().at(0)->getId()->getId();
+
+        // Skip resolution errors for generic constraint parameters
+        if (isGenericConstraintParam(name)) {
+            DEBUG("Skipping resolution for generic constraint param '%s'", name.c_str());
+            DEBUG_LEAVE("visitExprRefPathContext -- generic param");
+            return;
+        }
+
         std::string suggestion = findCloseMatch_rr(
             name, dynamic_cast<ast::ISymbolScope *>(m_ctxt->root()));
         if (suggestion.empty() && m_ctxt->symtab()) {
@@ -1057,13 +1079,59 @@ void TaskResolveRefs::visitStruct(ast::IStruct *i) {
     DEBUG_LEAVE("visitStruct");
 }
 
+void TaskResolveRefs::visitGenericConstraintDeclBool(ast::IGenericConstraintDeclBool *i) {
+    DEBUG_ENTER("visitGenericConstraintDeclBool");
+
+    // Register parameter names so they are not flagged as unknown
+    std::set<std::string> saved = m_generic_constraint_params;
+    for (auto &p : i->getParameters()) {
+        if (p->getName()) {
+            m_generic_constraint_params.insert(p->getName()->getId());
+        }
+    }
+
+    // Visit constraint body
+    visitConstraintBlock(i);
+
+    m_generic_constraint_params = saved;
+    DEBUG_LEAVE("visitGenericConstraintDeclBool");
+}
+
+void TaskResolveRefs::visitGenericConstraintDeclValue(ast::IGenericConstraintDeclValue *i) {
+    DEBUG_ENTER("visitGenericConstraintDeclValue");
+
+    std::set<std::string> saved = m_generic_constraint_params;
+    for (auto &p : i->getParameters()) {
+        if (p->getName()) {
+            m_generic_constraint_params.insert(p->getName()->getId());
+        }
+    }
+
+    // Visit the return expression
+    if (i->getExpr()) {
+        i->getExpr()->accept(m_this);
+    }
+
+    m_generic_constraint_params = saved;
+    DEBUG_LEAVE("visitGenericConstraintDeclValue");
+}
+
+bool TaskResolveRefs::isGenericConstraintParam(const std::string &name) const {
+    return m_generic_constraint_params.find(name) != m_generic_constraint_params.end();
+}
+
 ast::IScopeChild *TaskResolveRefs::resolvePath(ast::ISymbolRefPath *path) {
     ast::ISymbolScope *scope = m_ctxt->root();
     ast::IScopeChild *ret = m_ctxt->root();
 
+    if (!path) return ret;
+
     for (std::vector<ast::SymbolRefPathElem>::const_iterator
         it=path->getPath().begin();
         it!=path->getPath().end(); it++) {
+        if (!scope || it->idx >= (int32_t)scope->getChildren().size()) {
+            return 0;
+        }
         ret = scope->getChildren().at(it->idx).get();
 
         if (it+1 != path->getPath().end()) {

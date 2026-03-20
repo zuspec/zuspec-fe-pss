@@ -23,6 +23,7 @@ TOK_AS: 'as';
 TOK_ASTERISK: '*';
 TOK_EXTEND: 'extend';
 TOK_ACTION: 'action';
+TOK_ANNOTATION: 'annotation';
 TOK_COMPONENT: 'component';
 TOK_ENUM: 'enum';
 TOK_FROM: 'from';
@@ -123,6 +124,7 @@ TOK_GTE: '>=';
 TOK_IN: 'in';
 TOK_INT: 'int';
 TOK_BIT: 'bit';
+TOK_NUMERIC: 'numeric';
 TOK_ELIPSIS: '..';
 TOK_TRIPLE_ELIPSIS: '...';
 TOK_STRING: 'string';
@@ -166,6 +168,8 @@ TOK_CLASS: 'class';
 
 WS : [ \t\n\r]+ -> channel (10) ;
 //WS : [ \t\n\r]+ -> skip;
+
+TOK_COMMENT_AT: '//@';
 
 /**
  * BNF: SL_COMMENT ::= <kw>//</kw>\n 
@@ -223,6 +227,3 @@ BASED_BIN_LITERAL: '\'' ('s'|'S')? ('b'|'B') (('0'..'1') ('0'..'1'|'_')*);
 BASED_OCT_LITERAL: '\'' ('s'|'S')? ('o'|'O') (('0'..'7') ('0'..'7'|'_')*);
 OCT_LITERAL: '0' ('0'..'7')*;
 HEX_LITERAL: '0x' ('0'..'9'|'a'..'f'|'A'..'F') ('0'..'9'|'a'..'f'|'A'..'F'|'_')*;
-
-
-

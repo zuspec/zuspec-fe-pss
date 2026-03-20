@@ -1,5 +1,64 @@
 
 classes:
+    - GenericConstraintParam:
+        - super: ScopeChild
+        - doc: |
+            Parameter declaration for a PSS 3.1 generic constraint.
+
+            Generic constraint parameters may be typed with either a concrete
+            PSS data type or the `numeric` category and may optionally be
+            declared `const`.
+        - data:
+            - name: UP<ExprId>
+            - is_const: bool
+            - is_numeric: bool
+            - type: UP<DataType>
+
+    - GenericConstraintDeclBool:
+        - super: ConstraintBlock
+        - doc: |
+            Boolean generic constraint declaration.
+
+            Represents a declaration of the form
+            ``[static] constraint name(params) constraint_set``.
+        - data:
+            - is_static:
+                type: bool
+                is_ctor: false
+                init: false
+            - parameters:
+                type: list<UP<GenericConstraintParam>>
+                is_ctor: false
+
+    - GenericConstraintDeclValue:
+        - super: ScopeChild
+        - doc: |
+            Value-returning generic constraint declaration.
+
+            Represents a declaration of the form
+            ``[static] constraint <type> name(params) expr;``.
+        - data:
+            - is_static:
+                type: bool
+                is_ctor: false
+                init: false
+            - is_return_numeric:
+                type: bool
+                is_ctor: false
+                init: false
+            - return_type:
+                type: UP<DataType>
+                is_ctor: false
+            - name:
+                type: UP<ExprId>
+                is_ctor: false
+            - parameters:
+                type: list<UP<GenericConstraintParam>>
+                is_ctor: false
+            - expr:
+                type: UP<Expr>
+                is_ctor: false
+
     - ConstraintBlock:
         - super: ConstraintScope
         - doc: |

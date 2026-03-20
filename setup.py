@@ -39,6 +39,11 @@ if isSrcBuild:
     include_dirs.append(os.path.join(proj_dir, "src", "include"))
     include_dirs.append(os.path.join(proj_dir, "build", "include"))
 
+    # Add ciostream native header path
+    ciostream_inc = os.path.join(proj_dir, "packages", "ciostream", "src", "ciostream")
+    if os.path.isdir(ciostream_inc):
+        include_dirs.append(ciostream_inc)
+
 library_dirs = []
 libraries = []
 extra_link_args = []
