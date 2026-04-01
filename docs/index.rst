@@ -30,6 +30,7 @@ Key Features
    :caption: Getting Started:
 
    quickstart
+   cli
    pss30_migration
 
 .. toctree::

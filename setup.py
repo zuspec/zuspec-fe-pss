@@ -103,6 +103,9 @@ setup_args = dict(
     """,
     ext_modules=extensions,
     entry_points={
+        "console_scripts": [
+            "zuspec-fe-pss = zuspec.fe.pss.cli.app:main",
+        ],
         "ivpm.pkginfo": {
             'zuspec-parser = zuspec.fe.pss.pkginfo:PkgInfo'
         }

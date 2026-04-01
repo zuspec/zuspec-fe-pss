@@ -137,7 +137,6 @@ class Parser(object):
                 self._filenames[loc.file],
                 loc.line,
                 loc.pos+1)
-            print(marker_m)
             msg += marker_m + "\n"
 
         return msg
