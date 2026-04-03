@@ -1,37 +1,22 @@
 # Configuration file for the Sphinx documentation builder.
-#
-# For the full list of built-in configuration values, see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
 
-# -- Project information -----------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 import os
 import sys
 
-project = 'Zuspec Parser'
-copyright = '2024, Matthew Ballance'
+project = 'zuspec-fe-pss'
+copyright = '2026, Matthew Ballance'
 author = 'Matthew Ballance'
 
-project_dir=os.path.dirname(
+project_dir = os.path.dirname(
     os.path.dirname(
         os.path.abspath(__file__)))
 
-sys.path.insert(0, os.path.join(project_dir, "python"))
+sys.path.insert(0, os.path.join(project_dir, "src"))
 
-# -- General configuration ---------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
-
-extensions = [
-    'sphinx.ext.autodoc',
-]
+extensions = []
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-
-
-# -- Options for HTML output -------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
-
 html_theme = 'alabaster'
-html_static_path = ['_static']
+html_static_path = []

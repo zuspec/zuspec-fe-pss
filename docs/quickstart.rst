@@ -1,51 +1,76 @@
-##########
 Quickstart
-##########
+==========
 
-Installing Zuspec Parser
-========================
+Installing
+==========
 
-Zuspec Parser is most easily installed as a Python 
-package from PyPI. To install, run the following command:
+`zuspec-fe-pss` depends on:
 
-.. code:: bash
+- `pssparser` for parsing and AST construction
+- `zuspec-dataclasses` for IR and runtime support
 
-   %  pip install zuspec-parser
+In this workspace, both dependencies are provided through the managed
+environment loaded by `direnv`.
 
-.. note:: 
-    
-    Add instructions for building from source.
+Using `load_pss`
+================
 
-Trying Zuspec Parser
-====================
+The simplest entrypoint is `load_pss`, which parses PSS text, translates the
+AST to Zuspec IR, and returns a registry of generated Python classes.
 
-Zuspec Parser provides the `Parser` utility class to simplify
-the process of parsing and linking PSS content from a Python script.
+.. code-block:: python
 
-.. code:: Python
-    
-   from zsp_parser import Parser
+   from zuspec.fe.pss import load_pss
+
+   ns = load_pss("""
+   struct Packet {
+       rand bit[8] addr;
+   }
+   """)
+
+   pkt = ns.Packet()
+
+Using `Parser` Directly
+=======================
+
+If you need direct control over parsing and linking, import `Parser` from
+`zuspec.fe.pss`. The implementation is provided by `pssparser`.
+
+.. code-block:: python
+
+   from zuspec.fe.pss import Parser
 
    parser = Parser()
    parser.parses([(
-    "file1.pss",
-    """
-    component pss_top {
-      action A { }
-    }
-    """)
-   ])
+       "inline.pss",
+       """
+       component pss_top {
+           action A { }
+       }
+       """
+   )])
 
    root = parser.link()
 
-The above snippet is incredibly simple, but shows the basic flow of
-parsing and linking PSS content. 
+Translating To IR
+=================
 
-- The `parses` method accepts a list of tuples, each containing a filename
-  and the content to parse. The `parses` method raises an exception if 
-  syntax errors are encountered in any file,
-- The `link` method resolves references between the files and returns 
-  a linked symbol tree for further processing.
+For lower-level access to the translation pipeline:
 
+.. code-block:: python
 
+   from zuspec.fe.pss import Parser
+   from zuspec.fe.pss.ast_to_ir import AstToIrTranslator
 
+   parser = Parser()
+   parser.parses([("inline.pss", "struct S { int a; }")])
+   root = parser.link()
+
+   ctx = AstToIrTranslator().translate(root)
+   assert not ctx.errors
+
+Parser Documentation
+====================
+
+Parser- and AST-specific documentation now lives in the sibling
+`packages/pssparser/docs` tree.

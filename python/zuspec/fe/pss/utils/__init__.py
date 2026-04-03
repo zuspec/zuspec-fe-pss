@@ -1,3 +1,0 @@
-
-from .symbol_scope_util import SymbolScopeUtil
-from .symbol_type_scope_util import SymbolTypeScopeUtil

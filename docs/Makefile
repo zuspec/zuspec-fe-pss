@@ -5,7 +5,7 @@ DOCS_DIR:=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 # You can set these variables from the command line, and also
 # from the environment for the first two.
 SPHINXOPTS    ?=
-SPHINXBUILD   ?= $(DOCS_DIR)/../packages/python/bin/sphinx-build
+SPHINXBUILD   ?= sphinx-build
 SOURCEDIR     = .
 BUILDDIR      = _build
 

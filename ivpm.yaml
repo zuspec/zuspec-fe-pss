@@ -3,34 +3,14 @@ package:
   name: zuspec-fe-pss
   version: 0.0.1
 
-  setup-deps:
-  - ninja
-  - cython
-
   dep-sets:
   - name: default-dev
     deps: 
     - name: zuspec-dataclasses
       url: https://github.com/zuspec/zuspec-dataclasses.git
-    - name: antlr4-tools.jar
-      url: https://www.antlr.org/download/antlr-4.13.2-complete.jar
-    - name: antlr4-cpp-runtime
-      url: https://www.antlr.org/download/antlr4-cpp-runtime-4.13.2-source.zip
-    - name: gtest
-      url: https://github.com/google/googletest/archive/refs/tags/release-1.12.0.tar.gz
-    - name: pyastbuilder
-      url: https://github.com/mballance/pyastbuilder.git
-    - name: debug-mgr
-      src: pypi
+    - name: pssparser
+      url: https://github.com/PSSTools/pssparser.git
     - name: pytest
-      src: pypi
-    - name: toposort
-      src: pypi
-    - name: ciostream
-      url: https://github.com/mballance-utils/ciostream.git
-    - name: ninja
-      src: pypi
-    - name: cython
       src: pypi
     - name: Sphinx
       src: pypi
@@ -66,14 +46,7 @@ package:
 
   - name: default
     deps:
-    - name: ciostream
-      url: https://github.com/mballance-utils/ciostream.git
-    - name: pyastbuilder
-      url: https://github.com/mballance/pyastbuilder.git
-    - name: antlr4-tools.jar
-      url: https://www.antlr.org/download/antlr-4.13.2-complete.jar
-    - name: antlr4-cpp-runtime
-      url: https://www.antlr.org/download/antlr4-cpp-runtime-4.13.2-source.zip
-    - name: debug-mgr
-      src: pypi
-
+    - name: zuspec-dataclasses
+      url: https://github.com/zuspec/zuspec-dataclasses.git
+    - name: pssparser
+      url: https://github.com/PSSTools/pssparser.git
