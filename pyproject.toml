@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zuspec-fe-pss"
-version = "0.1.0"
+dynamic = ["version"]
 description = "PSS AST to Zuspec IR translation built on pssparser"
 authors = [
   { name = "Matthew Ballance", email = "matt.ballance@gmail.com" },
@@ -14,6 +14,9 @@ dependencies = [
   "pssparser",
   "zuspec-dataclasses",
 ]
+
+[tool.setuptools.dynamic]
+version = {attr = "zuspec.fe.pss.__version__.version"}
 
 [tool.setuptools]
 package-dir = {"" = "src"}
