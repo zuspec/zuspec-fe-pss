@@ -87,3 +87,125 @@ def get_libdirs():
 
 def get_incdirs():
     return []
+
+
+# ---------------------------------------------------------------------------
+# PSS-to-SystemVerilog generation API
+# ---------------------------------------------------------------------------
+
+from pathlib import Path
+import shutil
+
+
+def _get_runtime_lib_path() -> Path:
+    """Return the path to the bundled zsp_rt_pkg.sv runtime library."""
+    return Path(__file__).parent / "share" / "sv" / "zsp_rt_pkg.sv"
+
+
+def generate_sv(pss_text: str, output_dir: str, **options) -> List[Path]:
+    """Parse PSS source text and generate SystemVerilog files.
+
+    Steps:
+        1. Parse PSS text to IR.
+        2. Lower IR to SV IR nodes via ``pss_to_sv()``.
+        3. Serialize SV IR to text via ``SVEmitter``.
+        4. Write output files to *output_dir*.
+        5. Copy ``zsp_rt_pkg.sv`` runtime library to *output_dir*.
+
+    Returns:
+        List of paths to the generated files.
+    """
+    parser = Parser()
+    parser.parses([('inline.pss', pss_text)])
+    root = parser.link()
+    ir_ctx = AstToIrTranslator().translate(root)
+    if ir_ctx.errors:
+        raise PssTranslationError(ir_ctx.errors)
+    return _generate_sv_from_ctx(ir_ctx, output_dir, **options)
+
+
+def generate_sv_files(paths: List[Union[str, os.PathLike]], output_dir: str, **options) -> List[Path]:
+    """Parse PSS source files and generate SystemVerilog files.
+
+    Returns:
+        List of paths to the generated files.
+    """
+    str_paths = [str(p) for p in paths]
+    parser = Parser()
+    parser.parse(str_paths)
+    root = parser.link()
+    ir_ctx = AstToIrTranslator().translate(root)
+    if ir_ctx.errors:
+        raise PssTranslationError(ir_ctx.errors)
+    return _generate_sv_from_ctx(ir_ctx, output_dir, **options)
+
+
+def _generate_sv_from_ctx(ir_ctx: AstToIrContext, output_dir: str, **options) -> List[Path]:
+    """Internal: lower IR context and write SV output files.
+
+    When ``multi_file=True`` (default), output is organized into separate
+    files per node category (pkg, import_if, components, actions, top)
+    with a simulator file list.  When ``multi_file=False``, all nodes are
+    emitted to a single ``zsp_pkg.sv`` (legacy behaviour).
+
+    ``inference_mode`` controls runtime inference code generation:
+    ``"static"`` (default) -- no runtime inference code.
+    ``"sv-native"`` -- SV-native selectors for simple slots.
+    ``"dpi"`` -- DPI inference for complex, SV-native for simple.
+    ``"full"`` -- DPI inference for all slots.
+    """
+    from .sv.pss_to_sv import pss_to_sv
+    from .sv.emit_files import emit_files
+    from .sv.lower_top import generate_top_module
+
+    multi_file = options.pop('multi_file', True)
+    inference_mode = options.pop('inference_mode', 'static')
+    sv_nodes = pss_to_sv(ir_ctx)
+    rt_src = _get_runtime_lib_path()
+
+    # Optional top-level module generation
+    comp_type = options.pop('comp_type', None)
+    root_action_type = options.pop('root_action_type', None)
+    top_node = None
+    if comp_type and root_action_type:
+        top_node = generate_top_module(
+            comp_type=comp_type,
+            root_action_type=root_action_type,
+            import_if_type=options.pop('import_if_type', None),
+            import_if_driver=options.pop('import_if_driver', None),
+            watchdog_ns=options.pop('watchdog_ns', 0),
+        )
+
+    if multi_file:
+        return emit_files(
+            nodes=sv_nodes,
+            output_dir=output_dir,
+            runtime_lib_path=rt_src if rt_src.exists() else None,
+            top_module_node=top_node,
+        )
+
+    # Legacy single-file mode
+    from zuspec.be.sv.ir.sv_emit import SVEmitter
+
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    emitter = SVEmitter()
+
+    all_nodes = list(sv_nodes)
+    if top_node is not None:
+        all_nodes.append(top_node)
+
+    sv_text = emitter.emit_all(all_nodes)
+    written: List[Path] = []
+
+    gen_path = out / 'zsp_pkg.sv'
+    gen_path.write_text(sv_text + "\n")
+    written.append(gen_path)
+
+    if rt_src.exists():
+        rt_dst = out / 'zsp_rt_pkg.sv'
+        shutil.copy2(str(rt_src), str(rt_dst))
+        written.append(rt_dst)
+
+    return written
+
