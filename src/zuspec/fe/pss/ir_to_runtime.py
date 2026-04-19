@@ -417,7 +417,7 @@ class IrToRuntimeBuilder:
     def _resolve_activity_action_types(self) -> None:
         """Walk all __activity__ IR trees and populate action_type_cls on
         ActivityAnonTraversal nodes so the runner can find the Python class."""
-        from zuspec.dataclasses.ir.activity import ActivityAnonTraversal as _AAT
+        from zuspec.ir.core.activity import ActivityAnonTraversal as _AAT
 
         def _walk(node):
             if isinstance(node, _AAT) and node.action_type_cls is None:
@@ -439,7 +439,7 @@ class IrToRuntimeBuilder:
                     elif isinstance(child, _AAT):
                         _walk(child)
             if hasattr(node, 'branches'):
-                from zuspec.dataclasses.ir.activity import SelectBranch as _SB
+                from zuspec.ir.core.activity import SelectBranch as _SB
                 for b in (node.branches or []):
                     if isinstance(b, _SB):
                         for s in b.body or []:

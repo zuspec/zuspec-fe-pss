@@ -48,5 +48,7 @@ package:
     deps:
     - name: zuspec-dataclasses
       url: https://github.com/zuspec/zuspec-dataclasses.git
+    - name: zuspec-ir-core
+      url: https://github.com/zuspec/zuspec-ir-core.git
     - name: pssparser
       url: https://github.com/PSSTools/pssparser.git

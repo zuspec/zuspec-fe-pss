@@ -4,7 +4,7 @@ from zuspec.fe.pss import Parser
 from pssparser.core import Factory
 from zuspec.fe.pss.ast_to_ir import AstToIrTranslator
 from zuspec.dataclasses import ir
-from zuspec.dataclasses.ir.stmt import StmtExpr, StmtIf
+from zuspec.ir.core.stmt import StmtExpr, StmtIf
 
 Factory.inst()
 
@@ -215,8 +215,8 @@ class TestConditionalConstraints:
 class TestForeachConstraints:
     def test_foreach_constraint_basic(self):
         """foreach constraint over a list generates StmtForeach in constraint body."""
-        from zuspec.dataclasses.ir.stmt import StmtForeach
-        from zuspec.dataclasses.ir.expr import ExprRefLocal, ExprBin, ExprAttribute
+        from zuspec.ir.core.stmt import StmtForeach
+        from zuspec.ir.core.expr import ExprRefLocal, ExprBin, ExprAttribute
 
         ctx = parse_and_translate("""
             component C {
@@ -243,8 +243,8 @@ class TestForeachConstraints:
 
     def test_foreach_constraint_body_uses_local_var(self):
         """Loop variable 'e' in foreach body resolves to ExprRefLocal, not self.e."""
-        from zuspec.dataclasses.ir.stmt import StmtForeach
-        from zuspec.dataclasses.ir.expr import ExprRefLocal, ExprBin
+        from zuspec.ir.core.stmt import StmtForeach
+        from zuspec.ir.core.expr import ExprRefLocal, ExprBin
 
         ctx = parse_and_translate("""
             component C {
@@ -265,7 +265,7 @@ class TestForeachConstraints:
 
     def test_foreach_constraint_multiple_body_stmts(self):
         """foreach constraint with multiple body constraints generates multiple body stmts."""
-        from zuspec.dataclasses.ir.stmt import StmtForeach
+        from zuspec.ir.core.stmt import StmtForeach
 
         ctx = parse_and_translate("""
             component C {
@@ -284,8 +284,8 @@ class TestForeachConstraints:
 
     def test_foreach_constraint_local_var_not_in_scope_outside(self):
         """After foreach, the loop variable 'e' is no longer a local; other refs use self."""
-        from zuspec.dataclasses.ir.stmt import StmtForeach, StmtExpr
-        from zuspec.dataclasses.ir.expr import ExprAttribute
+        from zuspec.ir.core.stmt import StmtForeach, StmtExpr
+        from zuspec.ir.core.expr import ExprAttribute
 
         ctx = parse_and_translate("""
             component C {
