@@ -9,7 +9,7 @@ package:
     - name: zuspec-dataclasses
       url: https://github.com/zuspec/zuspec-dataclasses.git
     - name: pssparser
-      url: https://github.com/PSSTools/pssparser.git
+      src: pypi
     - name: pytest
       src: pypi
     - name: Sphinx
@@ -43,6 +43,7 @@ package:
       src: pypi
     - name: jinja2
       src: pypi
+
 
   - name: default
     deps:
