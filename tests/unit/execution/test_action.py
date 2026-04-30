@@ -104,3 +104,47 @@ def test_message_builtin_severity_constants(capsys):
     out = capsys.readouterr().out
     assert "sev-none" in out, f"Expected 'sev-none' in output, got: {out!r}"
 
+
+
+def test_print_builtin_outputs(capsys):
+    """print(fmt, ...) in exec body must produce stdout output."""
+    classes = _build("""
+        component C {
+            action A {
+                exec body {
+                    print("hello %d\\n", 42);
+                }
+            }
+        }
+    """)
+
+    import asyncio
+    async def run():
+        await classes.C.A()(classes.C())
+
+    asyncio.run(run())
+
+    out = capsys.readouterr().out
+    assert "hello 42\n" in out, f"Expected 'hello 42\\n' in output, got: {out!r}"
+
+
+def test_print_builtin_no_args(capsys):
+    """print(fmt) with no varargs must work (plain string)."""
+    classes = _build("""
+        component C {
+            action A {
+                exec body {
+                    print("plain\\n");
+                }
+            }
+        }
+    """)
+
+    import asyncio
+    async def run():
+        await classes.C.A()(classes.C())
+
+    asyncio.run(run())
+
+    out = capsys.readouterr().out
+    assert "plain\n" in out, f"Expected 'plain\\n' in output, got: {out!r}"

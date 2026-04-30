@@ -1,0 +1,13 @@
+// sml_pkg.pss -- Minimum stub for SML (System Memory Latency) modeling.
+// Implements the types referenced by the dma_allocation_for_peripherals pattern.
+package sml_pkg {
+    resource sml_core_r {}
+    buffer sml_data_buff {
+        rand bit[32] size;
+    }
+    abstract action move_data {
+        input  sml_data_buff src;
+        output sml_data_buff dst;
+        lock   sml_core_r    core;
+    }
+}

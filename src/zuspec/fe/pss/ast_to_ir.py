@@ -34,6 +34,8 @@ class AstToIrContext:
         self.parent_comp_names: Dict[str, str] = {}
         # Set of local variable names in the current scope (e.g. foreach loop vars)
         self.local_vars: set = set()
+        # Pending range constraints from `rand int in [range]` fields; flushed per type.
+        self._pending_range_constraints: list = []
 
     def push_scope(self, scope: ir.DataType):
         """Push a new scope (component, struct, etc.)"""
@@ -86,16 +88,22 @@ class AstToIrTranslator:
         self.logger = logging.getLogger(__name__)
         if debug:
             self.logger.setLevel(logging.DEBUG)
+        # Annotation injection state (populated per translate() call)
+        self._annotations: list = []
+        self._type_chain_stack: list = []  # enclosing type names during traversal
 
-    def translate(self, ast_root: pss_ast.GlobalScope) -> AstToIrContext:
-        """Translate the entire AST to IR
+    def translate(self, ast_root: pss_ast.GlobalScope, annotations=None) -> AstToIrContext:
+        """Translate the entire AST to IR.
 
         Args:
-            ast_root: Root AST node (GlobalScope)
-
+            ast_root:    Root AST node (GlobalScope)
+            annotations: Optional list of PssAnnotation from the two-pass Parser.
         Returns:
             Translation context with IR and type registry
         """
+        self._annotations = list(annotations) if annotations else []
+        self._type_chain_stack = []
+
         ctx = AstToIrContext()
 
         # Initialize built-in types
@@ -352,8 +360,9 @@ class AstToIrTranslator:
         if namespace_prefix:
             ctx.add_type(comp_name, comp)
 
-        # Push scope
+        # Push scope and type-chain name for annotation matching
         ctx.push_scope(comp)
+        self._type_chain_stack.append(comp_name)
 
         # Set super type reference if present
         if super_name:
@@ -378,6 +387,8 @@ class AstToIrTranslator:
             elif isinstance(child, pss_ast.Struct):
                 # Nested struct
                 self._translate_struct(ctx, child)
+            elif isinstance(child, pss_ast.EnumDecl):
+                self._translate_enum(ctx, child)
             elif isinstance(child, pss_ast.ExecBlock):
                 kind = child.getKind()
                 if kind == pss_ast.ExecKind.ExecKind_InitDown:
@@ -397,16 +408,109 @@ class AstToIrTranslator:
                     func = ir.Function(name='run_end', is_async=False, body=stmts)
                     comp.functions.append(func)
 
+        # Pop type-chain name for component
+        self._type_chain_stack.pop()
+
         # Add built-in functions for register groups
         if is_register_group:
             self._add_register_group_functions(ctx, comp)
             # Compute register offsets
             self._compute_register_offsets(ctx, comp)
 
+        # Infer pools and pool-binds from flow-object fields in nested actions.
+        # The PSS parser absorbs pool/bind declarations during link, so we
+        # reconstruct them by scanning actions for input/output FieldRef fields
+        # that reference flow-object types (buffer/stream/state/resource).
+        self._infer_pools_and_binds(ctx, comp, qualified_name)
+
         # Pop scope
         ctx.pop_scope()
 
         return comp
+
+    def _infer_pools_and_binds(self, ctx: AstToIrContext, comp: ir.DataTypeComponent, comp_name: str):
+        """Infer pool and pool-bind declarations from flow-object field refs in nested actions.
+
+        The PSS parser absorbs pool/bind AST nodes during link.  This method
+        reconstructs them by scanning all actions registered under this
+        component for input/output fields whose data types have a non-None
+        flow_kind.  For each unique flow-object type, a Pool is created and
+        a wildcard PoolBind is added (matching the ``bind pool_name *;``
+        pattern commonly used in PSS examples).
+        """
+        seen_flow_types: dict[str, ir.DataTypeStruct] = {}
+        prefix = f"{comp_name}::"
+
+        for qname, dtype in ctx.type_map.items():
+            if not qname.startswith(prefix):
+                continue
+            if not isinstance(dtype, ir.DataTypeClass):
+                continue
+            for field in dtype.fields:
+                if field.kind in (ir.FieldKind.Input, ir.FieldKind.Output,
+                                  ir.FieldKind.Lock, ir.FieldKind.Share):
+                    fdt = field.datatype
+                    if isinstance(fdt, ir.DataTypeStruct) and fdt.flow_kind is not None:
+                        if fdt.name and fdt.name not in seen_flow_types:
+                            seen_flow_types[fdt.name] = fdt
+
+        for type_name, fdt in seen_flow_types.items():
+            pool_name = f"{type_name}_pool"
+            pool = ir.Pool(name=pool_name, element_type_name=type_name, element_type=fdt)
+            comp.pools.append(pool)
+            bind = ir.PoolBind(pool_name=pool_name, is_wildcard=True)
+            comp.pool_binds.append(bind)
+
+        # Also infer resource pools from lock/share fields in *all* actions
+        # reachable from this component (including sub-components' actions).
+        # PSS `pool [N] R name; bind name *;` is absorbed by the parser, so we
+        # reconstruct it here.  Pool size defaults to 16 (sufficient for most
+        # SoC pad rings and resource banks; override by subclassing if needed).
+        seen_resource_types: dict[str, ir.DataTypeStruct] = {}
+
+        def _collect_resource_types_for(comp_name_inner):
+            """Recursively collect resource types from all actions under comp_name."""
+            inner_prefix = f"{comp_name_inner}::"
+            for qname2, dtype2 in ctx.type_map.items():
+                if not qname2.startswith(inner_prefix):
+                    continue
+                if isinstance(dtype2, ir.DataTypeComponent):
+                    # Recurse into sub-components
+                    _collect_resource_types_for(dtype2.name)
+                    continue
+                if not isinstance(dtype2, ir.DataTypeClass):
+                    continue
+                for f2 in dtype2.fields:
+                    if f2.kind in (ir.FieldKind.Lock, ir.FieldKind.Share):
+                        fdt2 = f2.datatype
+                        if isinstance(fdt2, ir.DataTypeStruct) and fdt2.flow_kind == "resource":
+                            if fdt2.name and fdt2.name not in seen_resource_types:
+                                seen_resource_types[fdt2.name] = fdt2
+
+        # Collect from direct children actions and all sub-component actions
+        _collect_resource_types_for(comp_name)
+        for field in comp.fields:
+            fdt = field.datatype
+            # Handle direct component references
+            sub_name = getattr(fdt, 'name', None) or getattr(fdt, 'ref_name', None)
+            if sub_name and isinstance(ctx.type_map.get(sub_name), ir.DataTypeComponent):
+                _collect_resource_types_for(sub_name)
+            # Handle component array fields (DataTypeArray whose element is a component)
+            elem_dt = getattr(fdt, 'element_type', None)
+            if elem_dt is not None:
+                elem_name = getattr(elem_dt, 'name', None) or getattr(elem_dt, 'ref_name', None)
+                if elem_name and isinstance(ctx.type_map.get(elem_name), ir.DataTypeComponent):
+                    _collect_resource_types_for(elem_name)
+
+        for type_name, fdt in seen_resource_types.items():
+            if any(p.element_type_name == type_name for p in comp.pools):
+                continue  # already have a pool for this type
+            pool_name = f"{type_name}_pool"
+            pool = ir.Pool(name=pool_name, element_type_name=type_name,
+                           element_type=fdt, capacity=16)
+            comp.pools.append(pool)
+            bind = ir.PoolBind(pool_name=pool_name, is_wildcard=True)
+            comp.pool_binds.append(bind)
 
     def _translate_action(self, ctx: AstToIrContext, action: pss_ast.Action,
                           parent_comp_name: Optional[str] = None,
@@ -448,9 +552,10 @@ class AstToIrTranslator:
         else:
             ctx.add_type(action_name, action_ir)
         
-        # Push scope
+        # Push scope and type-chain name for annotation matching
         ctx.push_scope(action_ir)
-        
+        self._type_chain_stack.append(action_name)
+
         # Handle inheritance
         super_t = action.getSuper_t()
         if super_t is not None:
@@ -469,6 +574,15 @@ class AstToIrTranslator:
                 
             if isinstance(child, pss_ast.Field):
                 field = self._translate_field(ctx, child)
+                if field:
+                    action_ir.fields.append(field)
+            elif isinstance(child, pss_ast.FieldRef):
+                field = self._translate_field_ref(ctx, child)
+                if field:
+                    action_ir.fields.append(field)
+            elif isinstance(child, pss_ast.FieldClaim):
+                # lock/share resource claim (PSS LRM section 9.3)
+                field = self._translate_field_claim(ctx, child)
                 if field:
                     action_ir.fields.append(field)
             elif isinstance(child, pss_ast.ExecBlock):
@@ -492,7 +606,22 @@ class AstToIrTranslator:
             elif isinstance(child, pss_ast.ActivityDecl):
                 action_ir.activity_ir = self._translate_activity_body(ctx, child)
                      
-        # Pop scope
+        # Flush any pending `rand int in [range]` constraints as a constraint function.
+        self._flush_range_constraints(ctx, action_ir)
+
+        # Inject forall constraints, covergroups, and fill rewrites from PssAnnotation side-channel
+        current_chain = list(self._type_chain_stack)
+        for ann in self._annotations:
+            if ann.type_chain == current_chain:
+                if ann.kind == 'forall':
+                    self._inject_forall_constraint(ctx, action_ir, ann)
+                elif ann.kind == 'covergroup':
+                    self._inject_covergroup(ctx, action_ir, ann)
+                elif ann.kind == 'fill' and action_ir.activity_ir is not None:
+                    self._inject_fill_in_activity(action_ir.activity_ir, ann)
+
+        # Pop scope and type-chain name
+        self._type_chain_stack.pop()
         ctx.pop_scope()
         
         return action_ir
@@ -606,7 +735,10 @@ class AstToIrTranslator:
 
         if isinstance(node, pss_ast.ActivitySelect):
             branches: List[ir.SelectBranch] = []
-            for b in node.getBranches():
+            for bi in range(node.numBranches()):
+                b = node.getBranche(bi)
+                if b is None:
+                    continue
                 guard = self._translate_expression(ctx, b.getGuard()) if b.getGuard() else None
                 weight = self._translate_expression(ctx, b.getWeight()) if b.getWeight() else None
                 body = b.getBody()
@@ -628,6 +760,23 @@ class AstToIrTranslator:
             body_stmts = self._translate_activity_stmts(ctx, _activity_body_children(node.getBody()))
             return ir.ActivityReplicate(count=count_expr, index_var=index_var, body=body_stmts)
 
+        if isinstance(node, pss_ast.ActivityMatch):
+            cond_expr = self._translate_expression(ctx, node.getCond())
+            cases: List[ir.MatchCase] = []
+            for ci in range(node.numChoices()):
+                choice = node.getChoice(ci)
+                is_default = bool(choice.getIs_default())
+                if is_default:
+                    pattern = None
+                else:
+                    # Translate ExprOpenRangeList -> ExprRangeList
+                    pattern = self._translate_open_range_list(ctx, choice.getCond())
+                body = choice.getBody()
+                body_stmts = self._translate_activity_stmts(
+                    ctx, _activity_body_children(body))
+                cases.append(ir.MatchCase(pattern=pattern, body=body_stmts))
+            return ir.ActivityMatch(subject=cond_expr, cases=cases)
+
         if isinstance(node, pss_ast.ActivityConstraint):
             exprs: List[ir.Expr] = []
             c = node.getConstraint()
@@ -640,8 +789,20 @@ class AstToIrTranslator:
             return ir.ActivityConstraint(constraints=exprs)
 
         if isinstance(node, pss_ast.ActivityBindStmt):
-            # Bind statements are structural; skip for now
-            return None
+            # Translate the LHS (ExprHierarchicalId -> ExprAttribute chain)
+            lhs_expr = self._hier_id_to_expr(node.getLhs())
+            # Translate each RHS; emit one ActivityBind per RHS item
+            if node.numRhs() == 0:
+                return None
+            if node.numRhs() == 1:
+                rhs_expr = self._hier_id_to_expr(node.getRh(0))
+                return ir.ActivityBind(src=lhs_expr, dst=rhs_expr)
+            # Multiple RHS: wrap in a sequence block
+            binds = []
+            for i in range(node.numRhs()):
+                rhs_expr = self._hier_id_to_expr(node.getRh(i))
+                binds.append(ir.ActivityBind(src=lhs_expr, dst=rhs_expr))
+            return ir.ActivitySequenceBlock(stmts=binds)
 
         if self.debug:
             self.logger.debug(f"Unhandled activity stmt type: {type(node).__name__}")
@@ -665,7 +826,8 @@ class AstToIrTranslator:
         handle = '.'.join(parts) if parts else None
         if handle is None:
             return None
-        return ir.ActivityTraversal(handle=handle, inline_constraints=[])
+        inline_constraints = self._extract_inline_constraints(ctx, node)
+        return ir.ActivityTraversal(handle=handle, inline_constraints=inline_constraints)
 
     def _translate_type_traversal(
         self,
@@ -693,11 +855,156 @@ class AstToIrTranslator:
         if label_node:
             label = label_node.getId() if hasattr(label_node, 'getId') else str(label_node)
 
+        inline_constraints = self._extract_inline_constraints(ctx, node)
+        # WI-6: detect and strip ``comp == expr`` from inline constraints.
+        # PSS allows ``do T with comp == target;`` to route the traversal to a
+        # specific component instance.  Extract it as comp_expr so the activity
+        # runner can pass it as a comp_override to _traverse.
+        comp_expr, filtered = self._extract_comp_expr(inline_constraints)
         return ir.ActivityAnonTraversal(
             action_type=action_type,
             label=label,
-            inline_constraints=[],
+            inline_constraints=filtered,
+            comp_expr=comp_expr,
         )
+
+    def _extract_inline_constraints(self, ctx, node) -> list:
+        """Extract `with` constraint expressions from a traversal node.
+
+        PSS supports two forms:
+          block:  do T with { expr1; expr2; }   -> ConstraintScope with numConstraints()
+          single: do T with expr;               -> ConstraintStmtExpr with getExpr()
+        """
+        with_c = node.getWith_c() if hasattr(node, 'getWith_c') else None
+        if not with_c:
+            return []
+        results = []
+        # Block form: constraint scope containing multiple items
+        if hasattr(with_c, 'numConstraints'):
+            for ci in range(with_c.numConstraints()):
+                cs = with_c.getConstraint(ci)
+                if cs is None:
+                    continue
+                stmts: list = []
+                self._collect_constraint_stmt(ctx, cs, stmts)
+                for s in stmts:
+                    if isinstance(s, ir.StmtExpr):
+                        results.append(s.expr)
+        # Single-expression form: do T with expr; -> ConstraintStmtExpr
+        elif hasattr(with_c, 'getExpr'):
+            expr_node = with_c.getExpr()
+            if expr_node is not None:
+                expr_ir = self._translate_expression(ctx, expr_node)
+                if expr_ir is not None:
+                    results.append(expr_ir)
+        return results
+
+
+    def _extract_comp_expr(self, constraints: list):
+        """Separate a ``comp == expr`` equality from other inline constraints.
+
+        Returns ``(comp_expr, remaining)`` where *comp_expr* is the RHS of the
+        ``comp == <rhs>`` expression (or ``None`` if not present), and
+        *remaining* is the list without that item.
+
+        PSS ``do T with comp == target;`` produces an ExprCompare(CmpOp.Eq,
+        ExprRefUnresolved("comp"), <rhs>) in the IR.
+        """
+        from zuspec.ir.core.expr import (
+            ExprCompare, CmpOp, ExprBin, BinOp,
+            ExprRefUnresolved, ExprAttribute,
+        )
+
+        def _is_comp_ref(e):
+            return (isinstance(e, ExprRefUnresolved) and e.name == 'comp') or                    (isinstance(e, ExprAttribute) and e.attr == 'comp')
+
+        comp_expr = None
+        remaining = []
+        for c in constraints:
+            matched = False
+            # Handle both ExprCompare (CmpOp.Eq) and ExprBin (BinOp.Eq)
+            if isinstance(c, ExprCompare) and c.op == CmpOp.Eq:
+                if _is_comp_ref(c.left):
+                    comp_expr = c.right; matched = True
+                elif _is_comp_ref(c.right):
+                    comp_expr = c.left; matched = True
+            elif isinstance(c, ExprBin) and c.op == BinOp.Eq:
+                if _is_comp_ref(c.lhs):
+                    comp_expr = c.rhs; matched = True
+                elif _is_comp_ref(c.rhs):
+                    comp_expr = c.lhs; matched = True
+            if not matched:
+                remaining.append(c)
+        return comp_expr, remaining
+
+    def _translate_open_range_list(self, ctx, range_list_node) -> 'ir.ExprRangeList':
+        """Translate a PSS ExprOpenRangeList to an IR ExprRangeList."""
+        ranges = []
+        if range_list_node is None:
+            return ir.ExprRangeList(ranges=[])
+        for vi in range(range_list_node.numValues()):
+            val = range_list_node.getValue(vi)
+            lhs = val.getLhs()
+            rhs = val.getRhs()
+            lower = self._translate_expression(ctx, lhs) if lhs else None
+            upper = self._translate_expression(ctx, rhs) if rhs else None
+            if lower is not None:
+                ranges.append(ir.ExprRange(lower=lower, upper=upper))
+        return ir.ExprRangeList(ranges=ranges)
+
+    def _translate_domain_range_list(self, ctx, domain_node) -> 'Optional[ir.ExprRangeList]':
+        """Translate a PSS ExprDomainOpenRangeList to an IR ExprRangeList.
+
+        Used for `rand int in [range]` domain constraint generation.
+        """
+        if domain_node is None:
+            return None
+        ranges = []
+        for vi in range(domain_node.numValues()):
+            val = domain_node.getValue(vi)
+            lhs = val.getLhs()
+            rhs = val.getRhs()
+            lower = self._translate_expression(ctx, lhs) if lhs else None
+            upper = self._translate_expression(ctx, rhs) if rhs else None
+            if lower is not None:
+                ranges.append(ir.ExprRange(lower=lower, upper=upper))
+        if not ranges:
+            return None
+        return ir.ExprRangeList(ranges=ranges)
+
+    def _flush_range_constraints(self, ctx: AstToIrContext, action_ir: ir.DataTypeStruct) -> None:
+        """Convert pending range constraints into a constraint function and clear them."""
+        if not ctx._pending_range_constraints:
+            return
+        body: List[ir.Stmt] = []
+        for _fname, in_expr in ctx._pending_range_constraints:
+            body.append(ir.StmtExpr(expr=in_expr))
+        n = sum(1 for f in action_ir.functions if f.metadata.get('_is_constraint'))
+        cfunc = ir.Function(
+            name=f'_range_{n}',
+            body=body,
+            metadata={'_is_constraint': True},
+        )
+        action_ir.functions.append(cfunc)
+        ctx._pending_range_constraints = []
+
+    def _hier_id_to_expr(self, hier_id) -> 'ir.Expr':
+        """Convert an ExprHierarchicalId to a chain of ExprAttribute nodes.
+
+        Used for ``bind lhs rhs;`` statement LHS/RHS which are
+        ``ExprMemberPathElem`` chains (e.g. ``p.out_data`` -> ``self.p.out_data``).
+        """
+        result: ir.Expr = ir.TypeExprRefSelf()
+        if hier_id is None:
+            return result
+        for i in range(hier_id.numElems()):
+            elem = hier_id.getElem(i)
+            id_obj = elem.getId() if hasattr(elem, 'getId') else None
+            if id_obj is None:
+                continue
+            name = id_obj.getId() if hasattr(id_obj, 'getId') else str(id_obj)
+            result = ir.ExprAttribute(value=result, attr=name)
+        return result
 
     def _translate_join_spec(self, join_spec) -> Optional['ir.JoinSpec']:
         """Convert a PSS ActivityJoinSpec to IR JoinSpec."""
@@ -714,6 +1021,27 @@ class AstToIrTranslator:
             count = self._translate_expression(None, join_spec.getCount()) if hasattr(join_spec, 'getCount') else None
             return ir.JoinSpec(kind='select', count=count)
         return ir.JoinSpec(kind='all')
+
+    def _translate_field_ref(self, ctx: AstToIrContext, field_ref: pss_ast.FieldRef) -> Optional[ir.Field]:
+        """Translate a PSS FieldRef (input/output flow-object reference) to IR Field."""
+        name_node = field_ref.getName()
+        field_name = name_node.getId() if hasattr(name_node, 'getId') else str(name_node)
+        is_input = field_ref.getIs_input()
+        flow_type = self._translate_data_type(ctx, field_ref.getType())
+        kind = ir.FieldKind.Input if is_input else ir.FieldKind.Output
+        return ir.Field(name=field_name, datatype=flow_type, kind=kind)
+
+    def _translate_field_claim(self, ctx: 'AstToIrContext', field_claim: 'pss_ast.FieldClaim') -> Optional['ir.Field']:
+        """Translate a PSS FieldClaim (lock/share resource reference) to an IR Field.
+
+        ``lock T name;`` -> Field(kind=FieldKind.Lock)
+        ``share T name;`` -> Field(kind=FieldKind.Share)
+        """
+        name_node = field_claim.getName()
+        field_name = name_node.getId() if hasattr(name_node, 'getId') else str(name_node)
+        resource_type = self._translate_data_type(ctx, field_claim.getType())
+        kind = ir.FieldKind.Lock if field_claim.getIs_lock() else ir.FieldKind.Share
+        return ir.Field(name=field_name, datatype=resource_type, kind=kind)
 
     def _translate_struct(self, ctx: AstToIrContext, struct: pss_ast.Struct, namespace_prefix: str = "") -> ir.DataTypeStruct:
         """Translate a PSS struct to IR DataTypeStruct
@@ -741,13 +1069,25 @@ class AstToIrTranslator:
         # Create IR struct
         struct_ir = ir.DataTypeStruct(name=qualified_name, super=None)
 
+        # Set flow_kind from StructKind (buffer/stream/state/resource)
+        if hasattr(struct, 'getKind'):
+            kind = struct.getKind()
+            _flow_kind_map = {
+                pss_ast.StructKind.Buffer:   "buffer",
+                pss_ast.StructKind.Stream:   "stream",
+                pss_ast.StructKind.State:    "state",
+                pss_ast.StructKind.Resource: "resource",
+            }
+            struct_ir.flow_kind = _flow_kind_map.get(kind)
+
         # Register in type map
         ctx.add_type(qualified_name, struct_ir)
         if namespace_prefix:
             ctx.add_type(struct_name, struct_ir)
 
-        # Push scope
+        # Push scope and type-chain name for annotation matching
         ctx.push_scope(struct_ir)
+        self._type_chain_stack.append(struct_name)
 
         # Handle inheritance
         super_t = struct.getSuper_t()
@@ -780,10 +1120,73 @@ class AstToIrTranslator:
                 if constraint_func:
                     struct_ir.functions.append(constraint_func)
 
+        # Inject forall constraints from PssAnnotation side-channel
+        current_chain = list(self._type_chain_stack)
+        for ann in self._annotations:
+            if ann.type_chain == current_chain:
+                if ann.kind == 'forall':
+                    self._inject_forall_constraint(ctx, struct_ir, ann)
+
+        # Pop type-chain name for struct
+        self._type_chain_stack.pop()
+
+        # Tag state structs that use the `initial` built-in in a constraint implication.
+        # The pre-processor injects `bool initial;` so the linker accepts `initial`,
+        # and now we record whether any constraint body references it.
+        if struct_ir.flow_kind == "state":
+            struct_ir.has_initial_constraint = self._struct_references_initial(struct_ir)
+            # Ensure `initial` field defaults to True (it is set False at runtime for
+            # non-initial states; True is the correct starting value per PSS LRM).
+            for f in struct_ir.fields:
+                if f.name == "initial":
+                    f.initial_value = ir.ExprConstant(value=1)
+                    break
+
         # Pop scope
         ctx.pop_scope()
 
         return struct_ir
+
+    def _struct_references_initial(self, struct_ir) -> bool:
+        """Return True if any constraint in this state struct references the `initial` field.
+
+        The pre-processor injects `bool initial;` into state struct bodies, so
+        the constraint `constraint initial -> val == X;` becomes translatable.
+        We check whether any constraint function body uses `initial` as a field ref.
+        """
+        from zuspec.ir.core.expr import ExprAttribute, TypeExprRefSelf, ExprRefUnresolved
+        for fn in struct_ir.functions:
+            if not fn.metadata.get('_is_constraint'):
+                continue
+            for stmt in fn.body:
+                if self._expr_has_name(stmt, 'initial'):
+                    return True
+        return False
+
+    def _expr_has_name(self, node, name: str) -> bool:
+        """Recursively check whether any ExprAttribute/ExprRefUnresolved references `name`."""
+        from zuspec.ir.core import expr as ir_expr
+        if node is None:
+            return False
+        if isinstance(node, ir_expr.ExprAttribute) and node.attr == name:
+            return True
+        if isinstance(node, ir_expr.ExprRefUnresolved) and node.name == name:
+            return True
+        # Recurse into scalar child attributes
+        for attr in ('expr', 'lhs', 'rhs', 'cond', 'value', 'func',
+                     'test', 'body', 'orelse', 'operand', 'val'):
+            child = getattr(node, attr, None)
+            if child is not None and not isinstance(child, (str, int, float, bool)):
+                if self._expr_has_name(child, name):
+                    return True
+        # Recurse into list child attributes
+        for attr in ('stmts', 'body', 'args', 'elts', 'ranges', 'body_exprs'):
+            lst = getattr(node, attr, None)
+            if isinstance(lst, list):
+                for item in lst:
+                    if self._expr_has_name(item, name):
+                        return True
+        return False
 
     def _collect_constraint_stmt(
         self,
@@ -949,6 +1352,9 @@ class AstToIrTranslator:
             idx = sum(1 for f in owner.functions if f.metadata.get('_is_constraint'))
             func_name = f'_c_{idx}'
 
+        # Detect soft/default constraints (PSS `constraint default ...`)
+        is_soft = bool(getattr(constraint_block, 'getIs_dynamic', lambda: False)())
+
         body: List[ir.Stmt] = []
 
         for i in range(constraint_block.numConstraints()):
@@ -999,11 +1405,14 @@ class AstToIrTranslator:
         if not body:
             return None
 
+        meta = {'_is_constraint': True}
+        if is_soft:
+            meta['is_soft'] = True
         return ir.Function(
             name=func_name,
             is_async=False,
             body=body,
-            metadata={'_is_constraint': True},
+            metadata=meta,
         )
 
     def _translate_enum(self, ctx: AstToIrContext, enum_decl: pss_ast.EnumDecl) -> ir.DataTypeEnum:
@@ -1104,6 +1513,18 @@ class AstToIrTranslator:
             rand_kind=rand_kind,
         )
 
+        # Extract `rand int in [range]` domain constraint (T-12).
+        dtype_node = field.getType()
+        if (isinstance(dtype_node, pss_ast.DataTypeInt)
+                and hasattr(dtype_node, 'getIn_range')
+                and dtype_node.getIn_range() is not None):
+            domain = dtype_node.getIn_range()
+            range_list = self._translate_domain_range_list(ctx, domain)
+            if range_list is not None:
+                field_ref = ir.ExprAttribute(value=ir.TypeExprRefSelf(), attr=field_name)
+                in_expr = ir.ExprIn(value=field_ref, container=range_list)
+                ctx._pending_range_constraints.append((field_name, in_expr))
+
         return ir_field
 
     def _translate_function(self, ctx: AstToIrContext, function) -> Optional[ir.Function]:
@@ -1177,13 +1598,15 @@ class AstToIrTranslator:
 
         # Create IR function
         is_pure = prototype.getIs_pure() if hasattr(prototype, 'getIs_pure') else False
+        is_solve = bool(prototype.getIs_solve()) if hasattr(prototype, 'getIs_solve') else False
         ir_func = ir.Function(
             name=func_name,
             args=args,
             body=body_stmts,
             returns=return_type,
             is_async=False,
-            is_invariant=bool(is_pure)
+            is_invariant=bool(is_pure),
+            is_solve=is_solve,
         )
 
         return ir_func
@@ -1609,13 +2032,24 @@ class AstToIrTranslator:
         return ir.ExprIfExp(test=test, body=body, orelse=orelse)
 
     def _translate_expr_in(self, ctx: AstToIrContext, expr) -> ir.ExprIn:
-        """Translate a PSS 'x in [...]' expression to IR ExprIn.
+        """Translate a PSS 'in' expression to IR ExprIn.
 
-        Converts ExprOpenRangeList to ExprRangeList with ExprRange items.
-        Single values become ExprRange(lower=v, upper=None).
-        Ranges become ExprRange(lower=lo, upper=hi).
+        Two forms:
+          Range-list: x in [0, 1, 2]     -> ExprIn(value, ExprRangeList([...]))
+          Collection: x in comp.some_list -> ExprIn(value, <ExprAttribute chain>)
+
+        The collection form is detected via getCollection() (non-None when the
+        grammar matched collection_expression rather than open_range_list).
         """
         value = self._translate_expression(ctx, expr.getLhs())
+
+        # Collection-reference form: x in comp.some_list
+        coll_node = expr.getCollection() if hasattr(expr, 'getCollection') else None
+        if coll_node is not None:
+            container = self._translate_expression(ctx, coll_node)
+            return ir.ExprIn(value=value, container=container)
+
+        # Range-list form: x in [0, 1, 2] or x in [lo..hi]
         rhs = expr.getRhs()  # ExprOpenRangeList
         ranges = []
         if rhs is not None:
@@ -1642,13 +2076,51 @@ class AstToIrTranslator:
 
         elems = [hier_id.getElem(i) for i in range(hier_id.numElems())]
 
-        # Check if the first (and only) element is a known local variable (e.g. foreach loop var).
-        # If so, emit ExprRefLocal rather than self.x.
-        if len(elems) == 1 and hasattr(elems[0], 'getId'):
+        # Check if the first element is a known local variable (e.g. foreach iterator 'p').
+        # Single-element: return ExprRefLocal('p').
+        # Multi-element: build ExprAttribute(ExprRefLocal('p'), 'x', ...) instead of
+        #   ExprAttribute(TypeExprRefSelf(), 'p', 'x') so the solver can substitute 'p'.
+        if elems and hasattr(elems[0], 'getId') and ctx is not None:
+            first_id = elems[0].getId()
+            first_name = first_id.getId() if isinstance(first_id, pss_ast.ExprId) else str(first_id)
+            if first_name in ctx.local_vars:
+                if len(elems) == 1:
+                    return ir.ExprRefLocal(name=first_name)
+                # Multi-element path rooted at a local variable (e.g. p.x, s.upper())
+                result_lv: ir.Expr = ir.ExprRefLocal(name=first_name)
+                for elem in elems[1:]:
+                    if not hasattr(elem, 'getId'):
+                        continue
+                    id_obj = elem.getId()
+                    attr = id_obj.getId() if isinstance(id_obj, pss_ast.ExprId) else str(id_obj)
+                    result_lv = ir.ExprAttribute(value=result_lv, attr=attr)
+                    n_sub = elem.numSubscript() if hasattr(elem, 'numSubscript') else 0
+                    for si in range(n_sub):
+                        sub_expr = elem.getSubscript(si)
+                        if sub_expr is not None:
+                            idx_ir = self._translate_expression(ctx, sub_expr)
+                            if idx_ir is not None:
+                                result_lv = ir.ExprSubscript(value=result_lv, slice=idx_ir)
+                    # Handle method calls on this element (e.g. s.upper())
+                    params = elem.getParams() if hasattr(elem, 'getParams') else None
+                    if params is not None and hasattr(params, 'numParameters'):
+                        args = []
+                        for j in range(params.numParameters()):
+                            arg_node = params.getParameter(j)
+                            arg_ir = self._translate_expression(ctx, arg_node)
+                            if arg_ir is not None:
+                                args.append(arg_ir)
+                        result_lv = ir.ExprCall(func=result_lv, args=args)
+                return result_lv
+
+        # If the first element refers to an enum constant, emit ExprConstant
+        # so the constraint solver sees a literal value instead of a variable.
+        if len(elems) == 1 and hasattr(elems[0], 'getId') and ctx is not None:
             id_obj = elems[0].getId()
             name = id_obj.getId() if isinstance(id_obj, pss_ast.ExprId) else str(id_obj)
-            if name in ctx.local_vars:
-                return ir.ExprRefLocal(name=name)
+            enum_val = self._resolve_enum_constant(ctx, name)
+            if enum_val is not None:
+                return ir.ExprConstant(value=enum_val)
 
         # Build the ExprAttribute chain starting from self.
         # Note: expr.getIs_super() is True for ALL scope-level references in the PSS
@@ -1683,6 +2155,16 @@ class AstToIrTranslator:
                 result = ir.ExprCall(func=result, args=args)
 
         return result
+
+    def _resolve_enum_constant(self, ctx: AstToIrContext, name: str) -> Optional[int]:
+        """Check if *name* is an enum member across all registered enums.
+
+        Returns the integer value if found, or None.
+        """
+        for dt in ctx.type_map.values():
+            if isinstance(dt, ir.DataTypeEnum) and name in dt.items:
+                return dt.items[name]
+        return None
 
     def _translate_expr_cast(self, ctx: AstToIrContext, expr) -> ir.ExprCast:
         """Translate a cast expression.
@@ -1843,7 +2325,10 @@ class AstToIrTranslator:
             return None
 
     def _type_identifier_name(self, node) -> Optional[str]:
-        """Extract the base type name string from a TypeIdentifier or ExprId node.
+        """Extract the (possibly package-qualified) type name from a TypeIdentifier or ExprId.
+
+        For multi-element TypeIdentifiers like ``sys_pkg::base_a``, returns the
+        full ``"::"``-joined name.  Single-element identifiers return the name directly.
 
         Args:
             node: pss_ast.TypeIdentifier or pss_ast.ExprId
@@ -1854,9 +2339,12 @@ class AstToIrTranslator:
         if isinstance(node, pss_ast.ExprId):
             return node.getId()
         if isinstance(node, pss_ast.TypeIdentifier) and node.numElems() > 0:
-            elem_id = node.getElem(0).getId()
-            if isinstance(elem_id, pss_ast.ExprId):
-                return elem_id.getId()
+            parts = []
+            for i in range(node.numElems()):
+                elem_id = node.getElem(i).getId()
+                nm = elem_id.getId() if isinstance(elem_id, pss_ast.ExprId) else str(elem_id)
+                parts.append(nm)
+            return "::".join(parts)
         return None
 
     def _translate_type_identifier(self, ctx: AstToIrContext, type_id: pss_ast.TypeIdentifier) -> Optional[ir.DataType]:
@@ -1890,13 +2378,30 @@ class AstToIrTranslator:
         if type_name in ("list", "array", "map", "set"):
             return self._translate_collection_type(ctx, type_name, elem)
 
+        # Build full qualified name for package-scoped types (e.g. sys_pkg::base_a)
+        if type_id.numElems() > 1:
+            parts = []
+            for i in range(type_id.numElems()):
+                e_id = type_id.getElem(i).getId()
+                nm = e_id.getId() if isinstance(e_id, pss_ast.ExprId) else str(e_id)
+                parts.append(nm)
+            qualified_name = "::".join(parts)
+        else:
+            qualified_name = type_name
+
         # Check type_map first (handles enums, typedefs, structs, components)
-        existing = ctx.get_type(type_name)
+        existing = ctx.get_type(qualified_name)
         if existing is not None:
             return existing
+        # Fallback: try short name when only a suffix is available
+        if "::" in qualified_name:
+            short = qualified_name.split("::")[-1]
+            existing = ctx.get_type(short)
+            if existing is not None:
+                return existing
 
         # Fall back to forward reference
-        return ir.DataTypeRef(ref_name=type_name)
+        return ir.DataTypeRef(ref_name=qualified_name)
 
     def _translate_collection_type(
         self,
@@ -2244,6 +2749,111 @@ class AstToIrTranslator:
                 current_offset += aligned_size
 
 
+    def _inject_fill_in_activity(self, activity_ir, ann) -> None:
+        """Wrap matching ActivityAnonTraversal nodes in ActivityFill.
+
+        The preprocessor normalises ``fill { do action ...; }`` to
+        ``do action;``, which the AST-to-IR translator converts to an
+        ``ActivityAnonTraversal``.  This method replaces that traversal with
+        ``ActivityFill(body=[traversal], max_iters=ann.data['max_iters'])``.
+
+        Only the *first* matching traversal in the body (recursively) is
+        replaced.  Subsequent fill blocks in the same activity would each
+        have their own annotation entry.
+        """
+        from zuspec.ir.core.activity import ActivityFill, ActivityAnonTraversal, ActivitySequenceBlock
+        action_name: str = ann.data.get('action_name', '')
+        max_iters: int = ann.data.get('max_iters', 1000)
+        if not action_name:
+            return
+        _replace_traversal_with_fill(activity_ir, action_name, max_iters)
+
+
+    # ---------------------------------------------------------------------------
+    # Annotation injection helpers
+    # ---------------------------------------------------------------------------
+
+    def _inject_forall_constraint(self, ctx: AstToIrContext, owner_ir, ann) -> None:
+        """Inject a forall constraint into *owner_ir* from a PssAnnotation.
+
+        Translates the pre-link body AST nodes captured during pass 1 into IR
+        StmtForeach nodes, wrapped in a constraint Function appended to
+        *owner_ir*.functions.  The collection path is built as an ExprAttribute
+        chain rooted at TypeExprRefSelf.
+        """
+        import pssparser.ast as pss_ast
+        iterator: str = ann.data.get('iterator', '')
+        coll_path: list = ann.data.get('collection', [])
+        body_ast: list = ann.data.get('body_ast', [])
+
+        if not iterator or not coll_path or not body_ast:
+            return
+
+        # Build collection expression: self.pkts (or self.comp.pkts for chained paths)
+        coll_expr: ir.Expr = ir.TypeExprRefSelf()
+        for part in coll_path:
+            coll_expr = ir.ExprAttribute(value=coll_expr, attr=part)
+
+        # Translate body with the iterator variable in scope
+        ctx.local_vars.add(iterator)
+        foreach_body: list = []
+        for stmt in body_ast:
+            if stmt is None:
+                continue
+            if isinstance(stmt, pss_ast.ConstraintStmtExpr):
+                expr_ir = self._translate_expression(ctx, stmt.getExpr())
+                if expr_ir is not None:
+                    foreach_body.append(ir.StmtExpr(expr=expr_ir))
+        ctx.local_vars.discard(iterator)
+
+        if not foreach_body:
+            return
+
+        idx = sum(1 for f in owner_ir.functions if f.metadata.get('_is_constraint'))
+        owner_ir.functions.append(ir.Function(
+            name=f'_c_{idx}',
+            is_async=False,
+            metadata={'_is_constraint': True},
+            body=[ir.StmtForeach(
+                target=ir.ExprRefLocal(name=iterator),
+                iter=coll_expr,
+                body=foreach_body,
+            )],
+        ))
+
+    def _inject_covergroup(self, ctx: AstToIrContext, owner_ir, ann) -> None:
+        """Inject a PssCoverGroup into *owner_ir*.covergroups from a PssAnnotation."""
+        from zuspec.ir.core.coverage import PssCoverGroup, PssCoverPoint, PssCoverCross
+
+        instance_name: str = ann.data.get('instance_name', 'cg')
+        cp_data_list: list = ann.data.get('coverpoints', [])
+        cx_data_list: list = ann.data.get('crosses', [])
+
+        coverpoints = []
+        for cp_data in cp_data_list:
+            target_name = cp_data.get('target', '')
+            if not target_name:
+                continue
+            target_expr = ir.ExprAttribute(value=ir.TypeExprRefSelf(), attr=target_name)
+            coverpoints.append(PssCoverPoint(
+                name=cp_data.get('name', target_name),
+                target_expr=target_expr,
+            ))
+
+        crosses = []
+        for cx_data in cx_data_list:
+            crosses.append(PssCoverCross(
+                name=cx_data.get('name', 'cross'),
+                coverpoint_names=list(cx_data.get('coverpoint_names', [])),
+            ))
+
+        owner_ir.covergroups.append(PssCoverGroup(
+            instance_name=instance_name,
+            coverpoints=coverpoints,
+            crosses=crosses,
+        ))
+
+
 def _activity_body_children(body):
     """Return an iterable of children for an activity body scope (or empty)."""
     if body is None:
@@ -2251,3 +2861,38 @@ def _activity_body_children(body):
     if hasattr(body, 'children'):
         return body.children()
     return []
+
+
+def _replace_traversal_with_fill(stmt_or_block, action_name: str, max_iters: int) -> bool:
+    """Recursively find the first ActivityAnonTraversal matching *action_name* in
+    *stmt_or_block* and replace it with ActivityFill(body=[traversal]).
+
+    Returns True if a replacement was made (so callers can stop recursing).
+    """
+    from zuspec.ir.core.activity import (
+        ActivityFill, ActivityAnonTraversal, ActivitySequenceBlock,
+        ActivityParallel, ActivitySchedule, ActivityAtomic,
+        ActivityRepeat, ActivityForeach, ActivityIfElse,
+    )
+
+    if not hasattr(stmt_or_block, 'stmts'):
+        return False
+    stmts = stmt_or_block.stmts
+    for idx, stmt in enumerate(stmts):
+        if isinstance(stmt, ActivityAnonTraversal):
+            # Check if this traversal matches the fill target
+            at = stmt.action_type or ''
+            if at == action_name or at.endswith(f'::{action_name}'):
+                stmts[idx] = ActivityFill(body=[stmt], max_iters=max_iters)
+                return True
+        # Recurse into nested blocks
+        if hasattr(stmt, 'stmts'):
+            if _replace_traversal_with_fill(stmt, action_name, max_iters):
+                return True
+        if hasattr(stmt, 'body') and hasattr(stmt.body, '__iter__'):
+            class _Wrapper:
+                def __init__(self, s):
+                    self.stmts = s
+            if _replace_traversal_with_fill(_Wrapper(stmt.body), action_name, max_iters):
+                return True
+    return False

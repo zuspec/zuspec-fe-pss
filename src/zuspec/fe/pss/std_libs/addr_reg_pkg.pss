@@ -1,0 +1,6 @@
+// addr_reg_pkg.pss -- Documentation stub only.
+// The pssparser ships addr_reg_pkg as a built-in standard library.
+// Key built-in types: addr_claim_s, contiguous_addr_space_c,
+//   transparent_addr_space_c, addr_handle_t, reg_c, reg_group_c.
+// DO NOT parse this file directly; it will cause duplicate-declaration errors.
+// Use the parser's built-in copy via normal PSS `import addr_reg_pkg::*;`.

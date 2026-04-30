@@ -201,7 +201,28 @@ class IrToRuntimeBuilder:
         ns['__annotations__'] = annotations
         cls = type(name, base_classes, ns)
         cls = _stdlib_dc.dataclass(cls)
+        # Resolve DataTypeRef fields to concrete types so the solver
+        # can identify their domains (e.g., DataTypeRef('lang_e') -> DataTypeEnum).
+        self._resolve_field_types(merged_dt)
         cls._zdc_struct = merged_dt
+        # Tag state/buffer/stream/resource structs so the runtime can identify flow_kind
+        if getattr(dt, 'flow_kind', None) is not None:
+            cls._pss_flow_kind = dt.flow_kind
+            cls._pss_has_initial = getattr(dt, 'has_initial_constraint', False)
+            # For resource types: ensure instance_id field exists (built-in PSS LRM field).
+            # For state types: ensure initial field exists (built-in PSS LRM field).
+            # The pre-processor injects these into PSS source; we guard here in case
+            # the Python-native path bypasses PSS parsing.
+            if dt.flow_kind == 'resource' and not hasattr(cls, 'instance_id'):
+                cls.instance_id = 0
+            if dt.flow_kind == 'state' and not hasattr(cls, 'initial'):
+                # Rebuild the dataclass with `initial` as an additional field
+                import dataclasses as _dc2
+                extra_ns = {'initial': _dc2.field(default=True), '__annotations__': {'initial': bool}}
+                extra_ns.update(cls.__dict__)
+                cls = type(cls.__name__, (object,), extra_ns)
+                cls = _stdlib_dc.dataclass(cls)
+                cls._zdc_struct = merged_dt
         return cls
 
     # ------------------------------------------------------------------
@@ -236,14 +257,57 @@ class IrToRuntimeBuilder:
             annotations[f.name] = py_type
             defaults[f.name] = default
 
+        # WI-2: Translate explicit pool declarations → ClaimPool pool fields.
+        # pool [N] pad_r padring; becomes a zdc.pool() field with N pre-built
+        # resource instances.  Wildcard bind (bind padring *;) is registered
+        # with the pool metadata so PoolResolver can resolve ancestor pools.
+        for pool in dt.pools:
+            elem_cls = self.python_classes.get(pool.element_type_name)
+            if elem_cls is None:
+                continue
+            cap = pool.capacity  # int or None
+            if cap is None or cap <= 0:
+                continue  # skip unbounded or zero-capacity pools for now
+            # Build a factory that makes cap fresh resource instances at init time
+            def _pool_factory(cls=elem_cls, n=cap):
+                from zuspec.dataclasses.types import ClaimPool
+                from zuspec.dataclasses.rt.resource_rt import make_resource
+                items = []
+                for i in range(n):
+                    r = make_resource(cls)
+                    r.instance_id = i
+                    if hasattr(r, 'pad_id'):
+                        r.pad_id = i
+                    items.append(r)
+                return ClaimPool.fromList(items)
+            annotations[pool.name] = 'ClaimPool'
+            defaults[pool.name] = zdc.pool(default_factory=_pool_factory)
+
         ns: Dict[str, Any] = {'__annotations__': annotations, **defaults}
 
         init_down = self._get_function(merged_dt, 'init_down')
-        if init_down:
-            ns['__post_init__'] = self._build_post_init(init_down)
+        init_up   = self._get_function(merged_dt, 'init_up')
+        # Both init_down and init_up run at component construction time.
+        # init_down runs depth-first top-down; init_up runs bottom-up.
+        # For simplicity we chain them both into __post_init__ in order.
+        if init_down or init_up:
+            _fns = [self._build_post_init(f) for f in [init_down, init_up] if f is not None]
+            def _combined_init(self_comp, fns=_fns):
+                for fn in fns:
+                    fn(self_comp)
+            ns['__post_init__'] = _combined_init
+
+        # Also translate solve functions and other helper functions on the
+        # component so that init_up/init_down can call them at runtime.
+        SKIP = {'init_down', 'init_up'}
+        for fn in merged_dt.functions:
+            if fn.name in SKIP or fn.name in ns:
+                continue
+            ns[fn.name] = self._build_sync_fn(fn)
 
         cls = type(name, (comp_base,), ns)
         built = zdc.dataclass(cls)
+        self._resolve_field_types(merged_dt)
         built._zdc_struct = merged_dt
         return built
 
@@ -284,6 +348,42 @@ class IrToRuntimeBuilder:
         if post_solve_fn:
             ns['post_solve'] = self._build_sync_fn(post_solve_fn)
 
+        # After the solver picks values for rand X_id fields (constrained by
+        # "x_id in comp.valid_list"), inject a post_solve that sets
+        # _resource_filters['X'] = (r.pad_id == solved_x_id) so the pool
+        # acquisition claims exactly the right resource.
+        # Convention: rand field "X_id" pairs with lock field "X" (strip _id).
+        lock_field_names = {
+            f.name for f in merged_dt.fields
+            if f.kind == zdc_ir.FieldKind.Lock
+        }
+        rand_id_pairs = [
+            (f.name, f.name[:-3])     # ("in_pad_id", "in_pad")
+            for f in merged_dt.fields
+            if f.kind == zdc_ir.FieldKind.Field
+            and getattr(f, 'rand_kind', None) is not None
+            and f.name.endswith('_id')
+            and f.name[:-3] in lock_field_names
+        ]
+        if rand_id_pairs:
+            existing_post = ns.get('post_solve')
+
+            def _make_filter_post_solve(pairs=rand_id_pairs, orig=existing_post):
+                def post_solve(self):
+                    if orig is not None:
+                        orig(self)
+                    filters = getattr(self, '_resource_filters', {})
+                    for rand_name, lock_name in pairs:
+                        val = getattr(self, rand_name, None)
+                        if val is not None:
+                            _v = int(val)
+                            filters[lock_name] = lambda r, _i, v=_v: r.pad_id == v
+                    self._resource_filters = filters
+                return post_solve
+
+            ns['post_solve'] = _make_filter_post_solve()
+
+
         cls = pytypes.new_class(
             dt.name,
             (ActionBase,),
@@ -291,7 +391,19 @@ class IrToRuntimeBuilder:
             lambda d: d.update(ns),
         )
         cls = _stdlib_dc.dataclass(cls, kw_only=True)
+        self._resolve_field_types(merged_dt)
         cls._zdc_struct = merged_dt
+        # Collect soft constraint functions (PSS `constraint default`) and attach
+        # to class so the constraint evaluator can treat them as lower-priority.
+        soft_fns = [
+            f for f in merged_dt.functions
+            if f.name.startswith('_c_') and f.metadata.get('is_soft')
+        ]
+        if soft_fns:
+            cls.__soft_constraints__ = [self._build_sync_fn(f) for f in soft_fns]
+        # Attach covergroup IR list for Phase 3 coverage sampling
+        if hasattr(dt, 'covergroups') and dt.covergroups:
+            cls.__pss_covergroups__ = dt.covergroups
         if getattr(dt, "activity_ir", None) is not None:
             cls.__activity__ = dt.activity_ir
         return cls
@@ -313,6 +425,11 @@ class IrToRuntimeBuilder:
 
     def _build_post_init(self, func: zdc_ir.Function):
         stmts = func.body
+        # Try to compile to native Python for speed; fall back to interpreter.
+        from zuspec.dataclasses.rt.ir_compiler import IRCompiler
+        compiled = IRCompiler().compile(stmts, self_arg='self_comp')
+        if compiled is not None:
+            return compiled
 
         def __post_init__(self_comp):
             try:
@@ -324,6 +441,11 @@ class IrToRuntimeBuilder:
 
     def _build_sync_fn(self, func: zdc_ir.Function):
         stmts = func.body
+        # Try to compile to native Python for speed; fall back to interpreter.
+        from zuspec.dataclasses.rt.ir_compiler import IRCompiler
+        compiled = IRCompiler().compile(stmts, self_arg='self_comp')
+        if compiled is not None:
+            return compiled
 
         def fn(self_action):
             try:
@@ -347,7 +469,13 @@ class IrToRuntimeBuilder:
         dt = f.datatype
         if isinstance(dt, zdc_ir.DataTypeInt):
             py_type = _INT_TYPE_MAP.get((dt.bits, dt.signed), int)
-            return py_type, 0
+            # Use explicit initial_value when set (e.g. `initial` field on state structs)
+            default = 0
+            if getattr(f, 'initial_value', None) is not None:
+                iv = f.initial_value
+                if hasattr(iv, 'value'):
+                    default = py_type(iv.value)
+            return py_type, default
         elif isinstance(dt, zdc_ir.DataTypeEnum):
             return int, 0
         elif isinstance(dt, (zdc_ir.DataTypeChandle,)):
@@ -372,6 +500,25 @@ class IrToRuntimeBuilder:
 
     def _field_to_zdc(self, f: zdc_ir.Field) -> Tuple[Any, Any]:
         dt = f.datatype
+        # Flow-object input/output fields hold struct instances.
+        # Set metadata so the activity runner can detect flow bindings.
+        if f.kind in (zdc_ir.FieldKind.Input, zdc_ir.FieldKind.Output):
+            direction = "input" if f.kind == zdc_ir.FieldKind.Input else "output"
+            flow_meta = {"kind": "flow_ref", "direction": direction}
+            if isinstance(dt, zdc_ir.DataTypeStruct):
+                ref_cls = self.python_classes.get(dt.name)
+                if ref_cls is not None:
+                    return ref_cls, zdc.field(default=None, metadata=flow_meta)
+            return int, zdc.field(default=None, metadata=flow_meta)
+        # Resource lock/share claims: carry metadata for the activity runner
+        if f.kind in (zdc_ir.FieldKind.Lock, zdc_ir.FieldKind.Share):
+            claim_kind = "lock" if f.kind == zdc_ir.FieldKind.Lock else "share"
+            res_meta = {"kind": "resource_ref", "claim": claim_kind}
+            if isinstance(dt, zdc_ir.DataTypeStruct):
+                ref_cls = self.python_classes.get(dt.name)
+                if ref_cls is not None:
+                    return ref_cls, zdc.field(default=None, metadata=res_meta)
+            return int, zdc.field(default=None, metadata=res_meta)
         if isinstance(dt, zdc_ir.DataTypeInt):
             py_type = _INT_TYPE_MAP.get((dt.bits, dt.signed), int)
             return py_type, zdc.field()
@@ -384,6 +531,15 @@ class IrToRuntimeBuilder:
             return list, zdc.field(default_factory=list)
         elif isinstance(dt, zdc_ir.DataTypeArray):
             n = dt.size if dt.size > 0 else 0
+            # WI-3: if the element type is a component, build a list of instances
+            elem_dt = dt.element_type
+            elem_cls = None
+            if isinstance(elem_dt, zdc_ir.DataTypeComponent) and elem_dt.name:
+                elem_cls = self.python_classes.get(elem_dt.name)
+            elif isinstance(elem_dt, zdc_ir.DataTypeRef):
+                elem_cls = self.python_classes.get(elem_dt.ref_name)
+            if elem_cls is not None and isinstance(elem_cls, type) and issubclass(elem_cls, zdc.Component):
+                return list, zdc.field(default_factory=lambda cls=elem_cls, _n=n: [cls() for _ in range(_n)])
             return list, zdc.field(default_factory=lambda _n=n: [0] * _n)
         elif isinstance(dt, zdc_ir.DataTypeMap):
             return dict, zdc.field(default_factory=dict)
@@ -450,6 +606,21 @@ class IrToRuntimeBuilder:
             if activity_ir is not None:
                 for stmt in getattr(activity_ir, 'stmts', []) or []:
                     _walk(stmt)
+
+    def _resolve_field_types(self, dt: zdc_ir.DataTypeStruct):
+        """Walk all fields and replace DataTypeRef with the resolved IR type.
+
+        This is necessary so the constraint solver's VariableExtractor can
+        determine domains (e.g., for enums) without chasing forward references.
+        """
+        for f in dt.fields:
+            if isinstance(f.datatype, zdc_ir.DataTypeRef):
+                resolved = self.ctx.type_map.get(f.datatype.ref_name)
+                if resolved is not None:
+                    f.datatype = resolved
+            # Also resolve nested struct fields recursively
+            if isinstance(f.datatype, zdc_ir.DataTypeStruct):
+                self._resolve_field_types(f.datatype)
 
     @staticmethod
     def _get_function(dt: zdc_ir.DataTypeStruct,
